@@ -372,11 +372,11 @@ if ($action === 'delete' && $server_id) {
                     <thead>
                         <tr>
                             <th><?php _e('Domaine', 'postal-warmup'); ?></th>
-                            <th><?php _e('API URL', 'postal-warmup'); ?></th>
+                            <th><?php _e('Utilisation Jour', 'postal-warmup'); ?></th>
+                            <th><?php _e('Priorité', 'postal-warmup'); ?></th>
                             <th><?php _e('Statut', 'postal-warmup'); ?></th>
-                            <th><?php _e('Envoyés', 'postal-warmup'); ?></th>
+                            <th><?php _e('Total', 'postal-warmup'); ?></th>
                             <th><?php _e('Succès', 'postal-warmup'); ?></th>
-                            <th><?php _e('Taux', 'postal-warmup'); ?></th>
                             <th><?php _e('Actions', 'postal-warmup'); ?></th>
                         </tr>
                     </thead>
@@ -394,6 +394,12 @@ if ($action === 'delete' && $server_id) {
                             } elseif ($success_rate >= 70) {
                                 $badge_class = 'warning';
                             }
+
+                            // Calculate Daily Usage
+                            $daily_used = \PostalWarmup\Models\Stats::get_server_daily_usage($server['id']);
+                            $daily_limit = \PostalWarmup\Models\Stats::get_dynamic_limit($server);
+                            $usage_pct = ($daily_limit > 0) ? round(($daily_used / $daily_limit) * 100) : 0;
+                            $limit_display = ($daily_limit > 0) ? $daily_limit : '∞';
                             
                             $delete_url = wp_nonce_url(
                                 admin_url('admin.php?page=postal-warmup-servers&action=delete&id=' . $server['id']), 
@@ -404,12 +410,15 @@ if ($action === 'delete' && $server_id) {
                             <tr>
                                 <td>
                                     <strong><?php echo esc_html($server['domain']); ?></strong>
+                                    <div style="font-size:11px; color:#666;"><?php echo esc_html($server['timezone'] ?: 'UTC'); ?></div>
                                 </td>
                                 <td>
-                                    <code style="font-size: 11px;">
-                                        <?php echo esc_html($server['api_url']); ?>
-                                    </code>
+                                    <strong><?php echo $daily_used; ?></strong> / <?php echo $limit_display; ?>
+                                    <div class="pw-progress-bar" style="background:#eee; height:5px; width:100px; margin-top:5px; border-radius:3px;">
+                                        <div style="background:<?php echo ($usage_pct > 90 ? '#d63638' : '#2271b1'); ?>; width:<?php echo min(100, $usage_pct); ?>%; height:100%; border-radius:3px;"></div>
+                                    </div>
                                 </td>
+                                <td><?php echo isset($server['priority']) ? $server['priority'] : 10; ?></td>
                                 <td>
                                     <?php if ($server['active']) { ?>
                                         <span class="pw-badge success">

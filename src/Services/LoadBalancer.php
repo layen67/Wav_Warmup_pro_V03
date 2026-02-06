@@ -38,12 +38,7 @@ class LoadBalancer {
         $eligible_servers = [];
 
         foreach ($servers as $server) {
-            // Check Timezone match (if template has strict timezone)
-            if ( ! $ignore_limits && ! empty($timezone) ) {
-                if (empty($server['timezone']) || $server['timezone'] !== $timezone) {
-                    continue; // Skip mismatch
-                }
-            }
+            // Timezone check removed: Timezone controls WHEN to send (Queue), not WHICH server to use.
 
             // Check Daily Limit (Dynamic or Static)
             $limit = Stats::get_dynamic_limit($server);

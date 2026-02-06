@@ -65,7 +65,7 @@ if (!defined('ABSPATH')) exit;
                                     echo '<option value="' . esc_attr($tz) . '">' . esc_html($tz) . '</option>';
                                 } ?>
                             </select>
-                            <p class="description">Si défini, ce template ne sera envoyé que par les serveurs ayant le même fuseau horaire.</p>
+                            <p class="description">Si défini, ce template sera envoyé uniquement sur les horaires définis dans les paramètres selon le Fuseau Horaire du template.</p>
                         </div>
                     </div>
                     
