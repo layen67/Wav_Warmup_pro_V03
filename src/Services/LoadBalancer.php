@@ -45,14 +45,23 @@ class LoadBalancer {
                 }
             }
 
-            // Check Daily Limit
-            $daily_limit = isset($server['daily_limit']) ? (int)$server['daily_limit'] : 0;
-            if ( ! $ignore_limits && $daily_limit > 0 ) {
+            // Check Daily Limit (Dynamic or Static)
+            $limit = Stats::get_dynamic_limit($server);
+
+            if ( ! $ignore_limits && $limit > 0 ) {
                 $usage = Stats::get_server_daily_usage($server['id']);
-                if ($usage >= $daily_limit) {
+                if ($usage >= $limit) {
                     // Capacity reached
                     continue;
                 }
+            }
+
+            // Add usage percentage for smart balancing
+            if ($limit > 0) {
+                $usage = Stats::get_server_daily_usage($server['id']);
+                $server['usage_pct'] = $usage / $limit;
+            } else {
+                $server['usage_pct'] = 0; // Unlimited/Uncalculated servers have 0 pressure (or high priority?)
             }
 
             $eligible_servers[] = $server;
@@ -65,7 +74,7 @@ class LoadBalancer {
              return null;
         }
 
-        // 3. Sort by Priority (DESC)
+        // 3. Sort by Priority (DESC) then by Usage (ASC)
         usort($eligible_servers, function($a, $b) {
             // Primary: Priority (High to Low)
             $prio_a = isset($a['priority']) ? (int)$a['priority'] : 10;
@@ -73,6 +82,14 @@ class LoadBalancer {
 
             if ($prio_a !== $prio_b) {
                 return $prio_b - $prio_a;
+            }
+
+            // Secondary: Usage Percentage (Low to High)
+            // Prefer less loaded servers
+            if ( isset($a['usage_pct']) && isset($b['usage_pct']) ) {
+                if ( abs($a['usage_pct'] - $b['usage_pct']) > 0.05 ) { // 5% difference threshold
+                    return ($a['usage_pct'] < $b['usage_pct']) ? -1 : 1;
+                }
             }
 
             return 0;

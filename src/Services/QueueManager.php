@@ -93,24 +93,14 @@ class QueueManager {
                 }
             }
 
-            // 4. Re-evaluate Server (Load Balancing / Quota Check)
-            // Even if assigned to server_id, we check if it can send.
-            // Or maybe re-assign via LB?
-            // For now, let's respect the assigned server but check limit.
+            // 4. Smart Server Re-assignment & Quota Check
+            // We re-run LoadBalancer to find the BEST current server, potentially overriding the original one.
+            // This ensures "Dynamic choice per email".
+            $best_server = LoadBalancer::select_server( $item['template_id'] ?: 'default' );
 
-            $server_id = $item['server_id'];
-
-            // Check Server Limit (Strategy)
-            // If limit reached, postpone item to tomorrow?
-            // Or just skip for now.
-            // Let's implement simple check:
-            $can_send = self::check_server_capacity( $server_id );
-
-            if ( ! $can_send ) {
-                // Postpone to tomorrow same time? Or +1 hour?
-                // Let's just skip this loop iteration, leaving it 'pending' for next run.
-                // But if we do that, we might loop forever if limits are tight.
-                // Better: Postpone 1 hour.
+            if ( ! $best_server ) {
+                // No server available at all (all limits reached or timezones mismatch)
+                // Postpone 1 hour
                 $wpdb->update(
                     $table,
                     [ 'scheduled_at' => date( 'Y-m-d H:i:s', strtotime( '+1 hour' ) ) ],
@@ -119,21 +109,20 @@ class QueueManager {
                 continue;
             }
 
-            // 4. Send
+            $server_id = $best_server['id'];
+
+            // 5. Send
             // Decode meta for template name, prefix, etc.
             $meta = json_decode( $item['meta'], true );
-            $domain = $meta['domain'] ?? ''; // Need domain
             $prefix = $meta['prefix'] ?? 'contact';
 
-            // If domain missing in meta, get from server_id (expensive query inside loop, but safer)
-            if ( empty( $domain ) ) {
-                $server = Database::get_server( $server_id );
-                $domain = $server['domain'];
-            }
+            // Always use the selected server's domain to prevent SPF failures
+            $domain = $best_server['domain'];
 
             $wpdb->update( $table, [ 'status' => 'processing' ], [ 'id' => $item['id'] ] );
 
-            $result = Sender::send( $item['to_email'], $domain, $prefix, Database::get_server( $server_id ) );
+            // Sender::send uses Database::get_server internally if object passed, or we can pass array
+            $result = Sender::send( $item['to_email'], $domain, $prefix, $best_server );
 
             if ( isset( $result['success'] ) && $result['success'] ) {
                 $wpdb->update(
@@ -161,16 +150,8 @@ class QueueManager {
         $server = Database::get_server( $server_id );
         if ( ! $server ) return false;
 
-        $limit = (int) $server['daily_limit'];
-
-        // Strategy: "Warmup Day" Logic
-        // If daily_limit is 0 (unlimited), check global strategy?
-        // User wants "Volume de départ" + "Croissance".
-        // Let's assume if daily_limit is set in Server Config, it overrides strategy.
-        // If daily_limit is 0, we use strategy?
-        // Actually, the new columns "daily_limit" I added are meant to be the *current* limit.
-        // The "Strategy" Cron will likely update this `daily_limit` value every night.
-        // So here, we just check `daily_limit`.
+        // Use unified logic in Stats model
+        $limit = \PostalWarmup\Models\Stats::get_dynamic_limit( $server );
 
         if ( $limit <= 0 ) return true; // Unlimited
 

@@ -387,4 +387,13 @@ class AjaxHandler {
 		
 		wp_send_json_success( [ 'stats' => $stats ] );
 	}
+
+	public function ajax_process_queue_manual() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		\PostalWarmup\Services\QueueManager::process_queue();
+
+		wp_send_json_success( [ 'message' => 'File d\'attente traitée' ] );
+	}
 }

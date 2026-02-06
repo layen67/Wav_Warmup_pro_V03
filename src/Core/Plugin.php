@@ -111,6 +111,12 @@ class Plugin {
 			wp_schedule_event( time(), 'every_minute', 'pw_process_queue' );
 		}
 
+		// Daily Warmup Increment
+		$this->loader->add_action( 'pw_warmup_daily_increment', 'PostalWarmup\Models\Stats', 'increment_warmup_day' );
+		if ( ! wp_next_scheduled( 'pw_warmup_daily_increment' ) ) {
+			wp_schedule_event( strtotime('tomorrow 00:00:00'), 'daily', 'pw_warmup_daily_increment' );
+		}
+
 		// Self-healing: Ensure daily report is scheduled if missing (Fix for existing installations)
 		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
 			wp_schedule_event( time(), 'daily', 'pw_daily_report' );

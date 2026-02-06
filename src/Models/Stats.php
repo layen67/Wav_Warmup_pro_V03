@@ -22,6 +22,24 @@ class Stats {
 		) );
 	}
 
+	public static function get_dynamic_limit( $server ) {
+		$limit = (int) $server['daily_limit'];
+
+		if ( $limit <= 0 ) {
+			$settings = get_option('pw_warmup_settings', []);
+			$start_vol = isset($settings['start_volume']) ? (int)$settings['start_volume'] : 10;
+			$growth = isset($settings['growth_rate']) ? (int)$settings['growth_rate'] : 20;
+
+			$day = isset($server['warmup_day']) ? (int)$server['warmup_day'] : 1;
+			if ($day < 1) $day = 1;
+
+			// Limit = Start * (1 + Growth/100)^(Day-1)
+			$limit = floor( $start_vol * pow( 1 + ($growth / 100), $day - 1 ) );
+		}
+
+		return $limit;
+	}
+
 	public static function get_dashboard_stats() {
 		// Try cache first
 		$cached = get_transient( 'pw_dashboard_stats' );
@@ -488,6 +506,16 @@ class Stats {
 		";
 		
 		return $wpdb->get_results( $wpdb->prepare( $sql, $date_from, $today, $today ), ARRAY_A ) ?: [];
+	}
+
+	public static function increment_warmup_day() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_servers';
+		// Only increment for active servers
+		// Logic: If limit is automatic (daily_limit = 0), we increment day.
+		// If user set a fixed limit, we might still increment day for tracking, or not.
+		// Generally good to increment for all active servers.
+		$wpdb->query( "UPDATE $table SET warmup_day = warmup_day + 1 WHERE active = 1" );
 	}
 
 	public static function aggregate_daily_stats() {
