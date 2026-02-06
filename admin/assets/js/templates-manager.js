@@ -40,6 +40,7 @@
             $('#pw-editor-template-id').val('');
             $('#pw-editor-name').prop('readonly', false);
             $('#pw-editor-folder').prop('disabled', false).removeClass('disabled-field');
+            $('#pw-editor-timezone').val('');
             $('#pw-system-template-info').hide();
             $('.pw-variants-container').empty();
             $('.pw-tab-btn[data-tab="general"]').click();
@@ -76,6 +77,7 @@
                         $('#pw-editor-folder').val(tpl.folder_id || '');
                     }
                     $('#pw-editor-status').val(tpl.status || 'active');
+                    $('#pw-editor-timezone').val(tpl.timezone || '');
                     
                     if (tpl.tags && Array.isArray(tpl.tags)) {
                         const tagNames = tpl.tags.map(t => typeof t === 'object' ? t.name : t).join(', ');
