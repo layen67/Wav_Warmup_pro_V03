@@ -29,6 +29,8 @@ class TemplateManager {
 					'text'    => count( $data['text'] ?? [] ),
 					'html'    => count( $data['html'] ?? [] )
 				];
+
+				$row['default_label'] = $data['default_label'] ?? '';
 				
 				// Map stats
 				$s = $all_stats[$row['name']] ?? [];

@@ -461,8 +461,8 @@ if (!$table_exists): ?>
                                         <label>Libellé</label>
                                         <input 
                                             type="text" 
-                                            class="pw-shortcode-label-input" 
-                                            value="Nous contacter" 
+                                            class="pw-default-label-input"
+                                            value="<?php echo !empty($tpl['default_label']) ? esc_attr($tpl['default_label']) : 'Nous contacter'; ?>"
                                             placeholder="Ex: Contactez-nous"
                                         >
                                     </div>
