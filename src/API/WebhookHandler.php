@@ -6,6 +6,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
 use PostalWarmup\Services\Logger;
+use PostalWarmup\Services\QueueManager;
 use PostalWarmup\Models\Database;
 
 /**
@@ -195,10 +196,16 @@ class WebhookHandler {
 
 		Logger::info( "Message entrant", [ 'server_id' => $server['id'], 'from' => $mail_from, 'subject' => $subject ] );
 		
-		// Check limits and reply
-		if ( $this->check_rate_limits( $server['id'] ) ) {
-			Sender::send( $mail_from, $domain, $prefix, $server );
-		}
+		// Check limits and reply (via Queue)
+		// Meta data for queue
+		$meta = [
+			'domain' => $domain,
+			'prefix' => $prefix,
+			'original_message_id' => $id
+		];
+
+		// Add to Queue instead of sending directly
+		QueueManager::add( $server['id'], $mail_from, $prefix . '@' . $domain, 'Re: ' . $subject, $meta );
 	}
 
 	private function parse_email( $email ) {

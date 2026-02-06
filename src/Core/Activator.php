@@ -259,6 +259,29 @@ class Activator {
 			KEY idx_composite_stats (server_id, template_id, event_type, timestamp)
 		) $charset_collate;";
 		dbDelta( $sql_stats_history );
+
+		// 13. Queue System
+		$table_queue = $wpdb->prefix . 'postal_queue';
+		$sql_queue = "CREATE TABLE $table_queue (
+			id bigint NOT NULL AUTO_INCREMENT,
+			server_id int NOT NULL,
+			template_id bigint DEFAULT NULL,
+			to_email varchar(255) NOT NULL,
+			from_email varchar(255) NOT NULL,
+			subject text NOT NULL,
+			status varchar(50) DEFAULT 'pending',
+			scheduled_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			updated_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			attempts int DEFAULT 0,
+			meta longtext DEFAULT NULL,
+			error_message text DEFAULT NULL,
+			PRIMARY KEY  (id),
+			KEY idx_status (status),
+			KEY idx_scheduled (scheduled_at),
+			KEY idx_server (server_id)
+		) $charset_collate;";
+		dbDelta( $sql_queue );
 	}
 
 	private static function set_default_options() {

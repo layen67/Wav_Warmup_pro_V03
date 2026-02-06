@@ -51,11 +51,12 @@ class Mailto {
 		}
 
 		// Select Server (Load Balancer)
+		// Mode "Display" : On ignore les limites pour toujours afficher le lien
 		$server = null;
 		if ( ! empty( $atts['server'] ) ) {
 			$server = Database::get_server_by_domain( $atts['server'] );
 		} else {
-			$server = LoadBalancer::select_server( $atts['template'] );
+			$server = LoadBalancer::select_server( $atts['template'], true );
 		}
 		
 		if ( ! $server ) {

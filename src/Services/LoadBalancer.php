@@ -12,9 +12,10 @@ class LoadBalancer {
      * Sélectionne le meilleur serveur pour un envoi
      *
      * @param string|int $template_id_or_name ID ou Nom du template
+     * @param bool $ignore_limits Si true, ignore limites et timezone (pour affichage shortcode)
      * @return array|null Le serveur sélectionné ou null
      */
-    public static function select_server($template_id_or_name) {
+    public static function select_server($template_id_or_name, $ignore_limits = false) {
         // 1. Récupérer le template pour connaître son fuseau horaire
         $timezone = null;
         global $wpdb;
@@ -38,7 +39,7 @@ class LoadBalancer {
 
         foreach ($servers as $server) {
             // Check Timezone match (if template has strict timezone)
-            if (!empty($timezone)) {
+            if ( ! $ignore_limits && ! empty($timezone) ) {
                 if (empty($server['timezone']) || $server['timezone'] !== $timezone) {
                     continue; // Skip mismatch
                 }
@@ -46,7 +47,7 @@ class LoadBalancer {
 
             // Check Daily Limit
             $daily_limit = isset($server['daily_limit']) ? (int)$server['daily_limit'] : 0;
-            if ($daily_limit > 0) {
+            if ( ! $ignore_limits && $daily_limit > 0 ) {
                 $usage = Stats::get_server_daily_usage($server['id']);
                 if ($usage >= $daily_limit) {
                     // Capacity reached
@@ -58,7 +59,9 @@ class LoadBalancer {
         }
 
         if (empty($eligible_servers)) {
-             Logger::warning("LoadBalancer: Aucun serveur éligible pour le template (Timezone: " . ($timezone ?: 'None') . ")");
+             if ( ! $ignore_limits ) {
+                 Logger::warning("LoadBalancer: Aucun serveur éligible pour le template (Timezone: " . ($timezone ?: 'None') . ")");
+             }
              return null;
         }
 

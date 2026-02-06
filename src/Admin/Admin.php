@@ -32,6 +32,7 @@ class Admin {
 		);
 		add_submenu_page( 'postal-warmup', __( 'Tableau de bord', 'postal-warmup' ), __( 'Tableau de bord', 'postal-warmup' ), 'manage_options', 'postal-warmup', [ $this, 'display_dashboard' ] );
 		add_submenu_page( 'postal-warmup', __( 'Serveurs', 'postal-warmup' ), __( 'Serveurs', 'postal-warmup' ), 'manage_options', 'postal-warmup-servers', [ $this, 'display_servers' ] );
+		add_submenu_page( 'postal-warmup', __( 'File d\'attente', 'postal-warmup' ), __( 'File d\'attente', 'postal-warmup' ), 'manage_options', 'postal-warmup-queue', [ $this, 'display_queue' ] );
 		add_submenu_page( 'postal-warmup', __( 'Templates', 'postal-warmup' ), __( 'Templates', 'postal-warmup' ), 'manage_options', 'postal-warmup-templates', [ $this, 'display_templates' ] );
 		add_submenu_page( 'postal-warmup', __( 'Statistiques', 'postal-warmup' ), __( 'Statistiques', 'postal-warmup' ), 'manage_options', 'postal-warmup-stats', [ $this, 'display_stats' ] );
 		add_submenu_page( 'postal-warmup', __( 'Logs', 'postal-warmup' ), __( 'Logs', 'postal-warmup' ), 'manage_options', 'postal-warmup-logs', [ $this, 'display_logs' ] );
@@ -92,6 +93,7 @@ class Admin {
 	// Views
 	public function display_dashboard() { require_once PW_ADMIN_DIR . 'partials/dashboard.php'; }
 	public function display_servers() { require_once PW_ADMIN_DIR . 'partials/servers.php'; }
+	public function display_queue() { require_once PW_ADMIN_DIR . 'partials/queue.php'; }
 	public function display_templates() { require_once PW_ADMIN_DIR . 'partials/templates.php'; }
 	public function display_stats() { require_once PW_ADMIN_DIR . 'partials/stats.php'; }
 	public function display_logs() { require_once PW_ADMIN_DIR . 'partials/logs.php'; }

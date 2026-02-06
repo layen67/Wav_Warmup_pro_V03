@@ -5,6 +5,7 @@ namespace PostalWarmup\Core;
 use PostalWarmup\Admin\Admin;
 use PostalWarmup\Admin\AjaxHandler;
 use PostalWarmup\Admin\Settings;
+use PostalWarmup\Admin\WarmupSettings;
 use PostalWarmup\API\WebhookHandler;
 use PostalWarmup\API\Sender;
 use PostalWarmup\Services\Logger;
@@ -34,12 +35,14 @@ class Plugin {
 	private function define_admin_hooks() {
 		$plugin_admin = new Admin( $this->version );
 		$plugin_settings = new Settings();
+		$warmup_settings = new WarmupSettings();
 		$ajax_handler = new AjaxHandler();
 
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'add_admin_menu' );
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_styles' );
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 		$this->loader->add_action( 'admin_init', $plugin_settings, 'register_settings' );
+		$this->loader->add_action( 'admin_init', $warmup_settings, 'register_settings' );
 		$this->loader->add_action( 'admin_notices', $plugin_admin, 'display_admin_notices' );
 		$this->loader->add_action( 'plugins_loaded', $this, 'check_upgrade' );
 
@@ -101,6 +104,12 @@ class Plugin {
 		$this->loader->add_action( 'pw_daily_report', 'PostalWarmup\Services\EmailNotifications', 'send_daily_report' );
 		$this->loader->add_action( 'pw_cleanup_old_stats', 'PostalWarmup\Models\Stats', 'cleanup_old_stats' );
 		$this->loader->add_action( 'pw_daily_stats_aggregation', 'PostalWarmup\Models\Stats', 'aggregate_daily_stats' );
+
+		// Queue Processing (Every Minute)
+		$this->loader->add_action( 'pw_process_queue', 'PostalWarmup\Services\QueueManager', 'process_queue' );
+		if ( ! wp_next_scheduled( 'pw_process_queue' ) ) {
+			wp_schedule_event( time(), 'every_minute', 'pw_process_queue' );
+		}
 
 		// Self-healing: Ensure daily report is scheduled if missing (Fix for existing installations)
 		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
