@@ -93,7 +93,8 @@ class AjaxHandler {
 			'id'        => (int) ( $_POST['id'] ?? 0 ),
 			'folder_id' => (int) ( $_POST['folder_id'] ?? 0 ),
 			'status'    => sanitize_text_field( $_POST['status'] ?? 'active' ),
-			'tags'      => array_map( 'sanitize_text_field', explode( ',', $_POST['tags'] ?? '' ) )
+			'tags'      => array_map( 'sanitize_text_field', explode( ',', $_POST['tags'] ?? '' ) ),
+			'timezone'  => sanitize_text_field( $_POST['timezone'] ?? '' )
 		];
 		
 		$result = TemplateManager::save_template( $name, $data, $meta );

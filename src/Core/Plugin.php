@@ -41,6 +41,7 @@ class Plugin {
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 		$this->loader->add_action( 'admin_init', $plugin_settings, 'register_settings' );
 		$this->loader->add_action( 'admin_notices', $plugin_admin, 'display_admin_notices' );
+		$this->loader->add_action( 'plugins_loaded', $this, 'check_upgrade' );
 
 		// Register all AJAX hooks via the AjaxHandler
 		$ajax_actions = [
@@ -104,6 +105,13 @@ class Plugin {
 		// Self-healing: Ensure daily report is scheduled if missing (Fix for existing installations)
 		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
 			wp_schedule_event( time(), 'daily', 'pw_daily_report' );
+		}
+	}
+
+	public function check_upgrade() {
+		if ( get_option( 'pw_version' ) !== PW_VERSION ) {
+			Activator::activate();
+			update_option( 'pw_version', PW_VERSION );
 		}
 	}
 

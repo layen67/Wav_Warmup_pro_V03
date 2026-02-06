@@ -6,6 +6,22 @@ use PostalWarmup\Models\Database;
 
 class Stats {
 
+	/**
+	 * Récupère le nombre d'emails envoyés aujourd'hui par un serveur.
+	 * Utilisé pour le Load Balancer.
+	 */
+	public static function get_server_daily_usage( int $server_id ) {
+		global $wpdb;
+		$stats_table = $wpdb->prefix . 'postal_stats';
+		$date = current_time( 'Y-m-d' );
+
+		return (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT SUM(sent_count) FROM $stats_table WHERE server_id = %d AND date = %s",
+			$server_id,
+			$date
+		) );
+	}
+
 	public static function get_dashboard_stats() {
 		// Try cache first
 		$cached = get_transient( 'pw_dashboard_stats' );

@@ -23,13 +23,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $api_url = esc_url_raw($_POST['api_url']);
         $api_key = sanitize_text_field($_POST['api_key']);
         $active = !empty($_POST['active']) ? 1 : 0;
+        $daily_limit = isset($_POST['daily_limit']) ? (int)$_POST['daily_limit'] : 0;
+        $priority = isset($_POST['priority']) ? (int)$_POST['priority'] : 10;
+        $timezone = sanitize_text_field($_POST['timezone']);
         
         if ($domain && $api_url && $api_key) {
             $result = PW_Database::insert_server(array(
                 'domain' => $domain,
                 'api_url' => $api_url,
                 'api_key' => $api_key,
-                'active' => $active
+                'active' => $active,
+                'daily_limit' => $daily_limit,
+                'priority' => $priority,
+                'timezone' => $timezone
             ));
             
             if ($result) {
@@ -48,11 +54,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $domain = sanitize_text_field($_POST['domain']);
         $api_url = esc_url_raw($_POST['api_url']);
         $active = !empty($_POST['active']) ? 1 : 0;
+        $daily_limit = isset($_POST['daily_limit']) ? (int)$_POST['daily_limit'] : 0;
+        $priority = isset($_POST['priority']) ? (int)$_POST['priority'] : 10;
+        $timezone = sanitize_text_field($_POST['timezone']);
         
         $data = array(
             'domain' => $domain,
             'api_url' => $api_url,
-            'active' => $active
+            'active' => $active,
+            'daily_limit' => $daily_limit,
+            'priority' => $priority,
+            'timezone' => $timezone
         );
         
         // ⭐ SÉCURITÉ : Ne mettre à jour la clé QUE si une nouvelle est fournie
@@ -155,6 +167,37 @@ if ($action === 'delete' && $server_id) {
                             <p class="description">
                                 <?php _e('Clé API serveur Postal (Settings > Credentials)', 'postal-warmup'); ?>
                             </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="daily_limit"><?php _e('Limite Quotidienne', 'postal-warmup'); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" id="daily_limit" name="daily_limit" class="small-text" value="0">
+                            <p class="description"><?php _e('0 = Illimité. Emails max par jour.', 'postal-warmup'); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="priority"><?php _e('Priorité', 'postal-warmup'); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" id="priority" name="priority" class="small-text" value="10">
+                            <p class="description"><?php _e('Plus haut = prioritaire. Défaut : 10.', 'postal-warmup'); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="timezone"><?php _e('Fuseau Horaire', 'postal-warmup'); ?></label>
+                        </th>
+                        <td>
+                            <select id="timezone" name="timezone">
+                                <option value="UTC">UTC</option>
+                                <?php foreach (timezone_identifiers_list() as $tz) {
+                                    echo '<option value="' . esc_attr($tz) . '">' . esc_html($tz) . '</option>';
+                                } ?>
+                            </select>
                         </td>
                     </tr>
                     <tr>

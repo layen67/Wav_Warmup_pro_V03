@@ -50,11 +50,16 @@ class Mailto {
 			return '<!-- Postal Warmup: Template not found -->';
 		}
 
-		// Select Server (Round Robin / Least Used)
-		$server = $this->get_server_random( $atts['server'] );
+		// Select Server (Load Balancer)
+		$server = null;
+		if ( ! empty( $atts['server'] ) ) {
+			$server = Database::get_server_by_domain( $atts['server'] );
+		} else {
+			$server = LoadBalancer::select_server( $atts['template'] );
+		}
 		
 		if ( ! $server ) {
-			return '<!-- Postal Warmup: No active server found -->';
+			return '<!-- Postal Warmup: No active server found for template ' . esc_html($atts['template']) . ' -->';
 		}
 
 		// Prepare mailto parts

@@ -57,6 +57,16 @@ if (!defined('ABSPATH')) exit;
                                 <option value="test">🔵 Test</option>
                             </select>
                         </div>
+                        <div class="pw-form-group">
+                            <label for="pw-editor-timezone">Fuseau Horaire</label>
+                            <select id="pw-editor-timezone" name="timezone" class="large-text">
+                                <option value="">Par défaut (Aucun)</option>
+                                <?php foreach (timezone_identifiers_list() as $tz) {
+                                    echo '<option value="' . esc_attr($tz) . '">' . esc_html($tz) . '</option>';
+                                } ?>
+                            </select>
+                            <p class="description">Si défini, ce template ne sera envoyé que par les serveurs ayant le même fuseau horaire.</p>
+                        </div>
                     </div>
                     
                     <div class="pw-form-group">

@@ -169,6 +169,7 @@ class TemplateManager {
 			'folder_id'  => $meta['folder_id'],
 			'status'     => $meta['status'],
 			'tags'       => implode( ',', $meta['tags'] ),
+			'timezone'   => $meta['timezone'] ?? null,
 			'updated_at' => current_time( 'mysql' )
 		];
 
