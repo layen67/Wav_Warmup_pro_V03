@@ -793,6 +793,7 @@
                             name: tpl.name,
                             folder_id: tpl.folder_id,
                             status: tpl.status,
+                            timezone: tpl.timezone || '',
                             tags: Array.isArray(tpl.tags) ? tpl.tags.join(',') : tpl.tags,
                             default_label: newVal,
                             variants: {
