@@ -197,10 +197,16 @@ class WebhookHandler {
 		Logger::info( "Message entrant", [ 'server_id' => $server['id'], 'from' => $mail_from, 'subject' => $subject ] );
 		
 		// Check limits and reply (via Queue)
+		// Lookup Template ID (Fix "Système" label issue)
+		global $wpdb;
+		$table_tpl = $wpdb->prefix . 'postal_templates';
+		$template_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table_tpl WHERE name = %s", $prefix ) );
+
 		// Meta data for queue
 		$meta = [
 			'domain' => $domain,
 			'prefix' => $prefix,
+			'template_id' => $template_id, // Pass ID to queue
 			'original_message_id' => $id
 		];
 

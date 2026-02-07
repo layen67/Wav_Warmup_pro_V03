@@ -159,4 +159,32 @@ class QueueManager {
 
         return $used < $limit;
     }
+
+    /**
+     * Nettoyage automatique des vieux éléments de la file d'attente
+     * Appelé par CRON (pw_cleanup_queue)
+     */
+    public static function cleanup() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'postal_queue';
+
+        // Récupérer le délai de rétention (défaut: 7 jours)
+        // Note: Option stockée individuellement via Settings.php
+        $days = (int) get_option('pw_queue_retention_days', 7);
+        if ($days < 1) $days = 7;
+
+        $date_limit = date('Y-m-d H:i:s', strtotime("-$days days"));
+
+        // Supprimer les éléments terminés (envoyés ou échoués)
+        $result = $wpdb->query($wpdb->prepare(
+            "DELETE FROM $table WHERE status IN ('sent', 'failed') AND updated_at < %s",
+            $date_limit
+        ));
+
+        if ($result !== false) {
+            Logger::info("Queue: Nettoyage terminé. $result éléments supprimés (Rétention: $days jours).");
+        } else {
+            Logger::error("Queue: Erreur lors du nettoyage de la base de données.");
+        }
+    }
 }

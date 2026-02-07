@@ -35,6 +35,14 @@ $total_pages = ceil($total / $per_page);
 <div class="wrap">
     <h1 class="wp-heading-inline">File d'attente Warmup</h1>
     <a href="#" id="pw-process-queue-btn" class="page-title-action">Forcer l'envoi immédiat (Cron)</a>
+
+    <?php
+    $retention = get_option('pw_queue_retention_days', 7);
+    ?>
+    <p class="description" style="display:inline-block; margin-left: 10px;">
+        (Rétention : <?php echo $retention; ?> jours pour les messages traités)
+    </p>
+
     <hr class="wp-header-end">
 
     <div class="tablenav top">
@@ -77,7 +85,18 @@ $total_pages = ceil($total / $per_page);
                 <?php foreach ($items as $item):
                     $server = Database::get_server($item['server_id']);
                     $server_name = $server ? esc_html($server['domain']) : 'ID ' . $item['server_id'];
-                    $template_name = !empty($item['template_name']) ? esc_html($item['template_name']) : '<em>Système</em>';
+
+                    // Template Name Logic: DB Join > Meta > Fallback
+                    $template_name = '<em>Système</em>';
+                    if (!empty($item['template_name'])) {
+                        $template_name = esc_html($item['template_name']);
+                    } else {
+                        // Try meta fallback
+                        $meta = json_decode($item['meta'], true);
+                        if (!empty($meta['prefix'])) {
+                             $template_name = esc_html($meta['prefix']) . ' <small style="color:#888">(Déduit)</small>';
+                        }
+                    }
 
                     $status_class = 'pw-badge ';
                     switch($item['status']) {

@@ -117,6 +117,12 @@ class Plugin {
 			wp_schedule_event( strtotime('tomorrow 00:00:00'), 'daily', 'pw_warmup_daily_increment' );
 		}
 
+		// Queue Cleanup (Daily)
+		$this->loader->add_action( 'pw_cleanup_queue', 'PostalWarmup\Services\QueueManager', 'cleanup' );
+		if ( ! wp_next_scheduled( 'pw_cleanup_queue' ) ) {
+			wp_schedule_event( time(), 'daily', 'pw_cleanup_queue' );
+		}
+
 		// Self-healing: Ensure daily report is scheduled if missing (Fix for existing installations)
 		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
 			wp_schedule_event( time(), 'daily', 'pw_daily_report' );
