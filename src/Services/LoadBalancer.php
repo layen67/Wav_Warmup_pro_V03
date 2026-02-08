@@ -69,37 +69,52 @@ class LoadBalancer {
              return null;
         }
 
-        // 3. Sort by Priority (DESC) then by Usage (ASC)
+        // 3. Smart Scoring Algorithm (Load Balancing V2)
+        foreach ($eligible_servers as &$server) {
+            $usage_today = isset($server['sent_count']) ? (int)$server['sent_count'] : 0; // This is lifetime sent_count actually
+            $usage_today = Stats::get_server_daily_usage($server['id']); // Get real daily usage
+
+            // Retrieve reputation (placeholder for now, default 100)
+            $reputation = 100;
+
+            // Warmup step (days active)
+            $warmup_step = isset($server['warmup_day']) ? (int)$server['warmup_day'] : 1;
+
+            // ISP Usage (Not per server yet, global per ISP, but we can't filter by ISP here without destination email)
+            // Load Balancer at shortcode level doesn't know destination email yet!
+            // So we skip ISP specific scoring here. It will be handled in QueueManager which knows the recipient.
+
+            // Score Formula: Lower is better
+            // (Usage * 2) - (Reputation * 3) + (WarmupDay * 1)
+            // Ideally we want to fill servers with higher reputation and higher warmup day capacity,
+            // but balance the load (usage).
+
+            // Adjusted Formula:
+            // Base = Usage Percentage * 100 (0 to 100)
+            // Priority Penalty = (100 - Priority) * 5 (High priority reduces score)
+
+            $prio = isset($server['priority']) ? (int)$server['priority'] : 10;
+            $usage_pct = isset($server['usage_pct']) ? $server['usage_pct'] * 100 : 0;
+
+            $score = ($usage_pct * 2) + ((100 - $prio) * 5);
+
+            $server['balancing_score'] = $score;
+        }
+        unset($server);
+
+        // Sort by Score ASC
         usort($eligible_servers, function($a, $b) {
-            // Primary: Priority (High to Low)
-            $prio_a = isset($a['priority']) ? (int)$a['priority'] : 10;
-            $prio_b = isset($b['priority']) ? (int)$b['priority'] : 10;
-
-            if ($prio_a !== $prio_b) {
-                return $prio_b - $prio_a;
-            }
-
-            // Secondary: Usage Percentage (Low to High)
-            // Prefer less loaded servers
-            if ( isset($a['usage_pct']) && isset($b['usage_pct']) ) {
-                if ( abs($a['usage_pct'] - $b['usage_pct']) > 0.05 ) { // 5% difference threshold
-                    return ($a['usage_pct'] < $b['usage_pct']) ? -1 : 1;
-                }
-            }
-
-            return 0;
+            return $a['balancing_score'] <=> $b['balancing_score'];
         });
 
-        // Filter top priority group
-        $top_server = $eligible_servers[0];
-        $top_priority = isset($top_server['priority']) ? (int)$top_server['priority'] : 10;
+        // Pick best (lowest score)
+        return $eligible_servers[0];
+    }
 
-        $top_tier = array_filter($eligible_servers, function($s) use ($top_priority) {
-            $p = isset($s['priority']) ? (int)$s['priority'] : 10;
-            return $p === $top_priority;
-        });
-
-        // Pick random from top tier (Round Robin simulation)
-        return $top_tier[array_rand($top_tier)];
+    /**
+     * Sélectionne le meilleur serveur (alias pour compatibilité)
+     */
+    public static function choose_best_server($template_id) {
+        return self::select_server($template_id);
     }
 }

@@ -22,6 +22,19 @@ class Stats {
 		) );
 	}
 
+	public static function get_isp_daily_usage( string $isp ) {
+		global $wpdb;
+		// Check postal_queue which has 'isp' column and status='sent'/'processing'
+		$queue_table = $wpdb->prefix . 'postal_queue';
+		$date_start = current_time( 'Y-m-d 00:00:00' );
+
+		return (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM $queue_table WHERE isp = %s AND status IN ('sent', 'processing') AND updated_at >= %s",
+			$isp,
+			$date_start
+		) );
+	}
+
 	public static function get_dynamic_limit( $server ) {
 		$limit = (int) $server['daily_limit'];
 

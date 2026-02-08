@@ -6,6 +6,8 @@ use PostalWarmup\Models\Database;
 use PostalWarmup\Services\Logger;
 use PostalWarmup\API\Sender;
 use PostalWarmup\Services\LoadBalancer;
+use PostalWarmup\Services\ISPDetector;
+use PostalWarmup\Models\Stats;
 
 class QueueManager {
 
@@ -61,7 +63,36 @@ class QueueManager {
         if ( empty( $items ) ) return;
 
         foreach ( $items as $item ) {
-            // 3. Check Timezone Per Item
+            // Update ISP info (if missing)
+            if ( empty( $item['isp'] ) || $item['isp'] === 'Other' ) {
+                $detected_isp = ISPDetector::detect( $item['to_email'] );
+                if ( $detected_isp !== 'Other' ) {
+                    $wpdb->update( $table, [ 'isp' => $detected_isp ], [ 'id' => $item['id'] ] );
+                    $item['isp'] = $detected_isp;
+                }
+            }
+
+            // 3. Check ISP Limits
+            if ( ! empty( $settings['isp_limits'] ) && is_array( $settings['isp_limits'] ) ) {
+                $isp_name = $item['isp'];
+                if ( isset( $settings['isp_limits'][$isp_name] ) ) {
+                    $limit_isp = (int) $settings['isp_limits'][$isp_name];
+                    if ( $limit_isp > 0 ) {
+                        $usage_isp = Stats::get_isp_daily_usage( $isp_name );
+                        if ( $usage_isp >= $limit_isp ) {
+                            Logger::info( "Queue: Item #{$item['id']} reporté (Limite ISP {$isp_name} atteinte: $usage_isp/$limit_isp)" );
+                             $wpdb->update(
+                                $table,
+                                [ 'scheduled_at' => date( 'Y-m-d H:i:s', strtotime( '+1 hour', current_time( 'timestamp' ) ) ) ],
+                                [ 'id' => $item['id'] ]
+                            );
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            // 4. Check Timezone Per Item
             // Determine effective timezone: Template > Global
             $timezone = $global_tz;
             $meta = json_decode( $item['meta'], true );
@@ -101,7 +132,7 @@ class QueueManager {
                 }
             }
 
-            // 4. Smart Server Re-assignment & Quota Check
+            // 5. Smart Server Re-assignment & Quota Check
             // We re-run LoadBalancer to find the BEST current server, potentially overriding the original one.
             // This ensures "Dynamic choice per email".
             $best_server = LoadBalancer::select_server( $item['template_id'] ?: 'default' );

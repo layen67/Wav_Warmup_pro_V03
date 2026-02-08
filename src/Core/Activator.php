@@ -276,10 +276,12 @@ class Activator {
 			attempts int DEFAULT 0,
 			meta longtext DEFAULT NULL,
 			error_message text DEFAULT NULL,
+			isp varchar(50) DEFAULT 'Other',
 			PRIMARY KEY  (id),
 			KEY idx_status (status),
 			KEY idx_scheduled (scheduled_at),
-			KEY idx_server (server_id)
+			KEY idx_server (server_id),
+			KEY idx_isp (isp)
 		) $charset_collate;";
 		dbDelta( $sql_queue );
 	}

@@ -71,7 +71,7 @@ $total_pages = ceil($total / $per_page);
                 <th width="60">ID</th>
                 <th>Template</th>
                 <th>Serveur Assigné</th>
-                <th>Destinataire</th>
+                <th>Destinataire / ISP</th>
                 <th>Sujet</th>
                 <th width="100">Statut</th>
                 <th>Prévu pour</th>
@@ -97,6 +97,10 @@ $total_pages = ceil($total / $per_page);
                              $template_name = esc_html($meta['prefix']) . ' <small style="color:#888">(Déduit)</small>';
                         }
                     }
+
+                    // ISP Display
+                    $isp = !empty($item['isp']) ? esc_html($item['isp']) : '<em>Inconnu</em>';
+                    $isp_badge = ($isp !== 'Other' && $isp !== 'Inconnu') ? '<span class="pw-isp-badge">' . $isp . '</span>' : '';
 
                     $status_class = 'pw-badge ';
                     switch($item['status']) {
@@ -130,7 +134,10 @@ $total_pages = ceil($total / $per_page);
                     <td>#<?php echo $item['id']; ?></td>
                     <td><strong><?php echo $template_name; ?></strong></td>
                     <td><?php echo $server_name; ?></td>
-                    <td><?php echo esc_html($item['to_email']); ?></td>
+                    <td>
+                        <?php echo esc_html($item['to_email']); ?><br>
+                        <?php echo $isp_badge; ?>
+                    </td>
                     <td><?php echo esc_html(mb_strimwidth($item['subject'], 0, 30, '...')); ?></td>
                     <td><span class="pw-queue-status <?php echo $status_class; ?>"><?php echo $status_label; ?></span></td>
                     <td>
@@ -157,6 +164,15 @@ $total_pages = ceil($total / $per_page);
 .status-processing { background: #fff8e5; color: #996800; border: 1px solid #f0c33c; }
 .status-sent { background: #edfaef; color: #005a1e; border: 1px solid #7cc18b; }
 .status-failed { background: #fbeaea; color: #d63638; border: 1px solid #f56e28; }
+.pw-isp-badge {
+    display: inline-block;
+    background: #e5e7eb;
+    color: #374151;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 99px;
+    margin-top: 2px;
+}
 </style>
 
 <script>
