@@ -77,8 +77,14 @@
                         $('#pw-editor-folder').val(tpl.folder_id || '');
                     }
                     $('#pw-editor-status').val(tpl.status || 'active');
-                    $('#pw-editor-timezone').val(tpl.timezone || '');
                     
+                    // Force Timezone Loading - Explicitly set the value
+                    if (tpl.timezone) {
+                        $('#pw-editor-timezone').val(tpl.timezone);
+                    } else {
+                        $('#pw-editor-timezone').val('');
+                    }
+
                     if (tpl.tags && Array.isArray(tpl.tags)) {
                         const tagNames = tpl.tags.map(t => typeof t === 'object' ? t.name : t).join(', ');
                         $('#pw-editor-tags').val(tagNames);
