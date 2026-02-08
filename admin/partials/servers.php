@@ -174,7 +174,7 @@ if ($action === 'delete' && $server_id) {
                             <label for="daily_limit"><?php _e('Limite Quotidienne', 'postal-warmup'); ?></label>
                         </th>
                         <td>
-                            <input type="number" id="daily_limit" name="daily_limit" class="small-text" value="0">
+                            <input type="number" id="daily_limit" name="daily_limit" class="small-text" value="<?php echo esc_attr($server['daily_limit']); ?>">
                             <p class="description"><?php _e('0 = Illimité. Emails max par jour.', 'postal-warmup'); ?></p>
                         </td>
                     </tr>
@@ -183,7 +183,7 @@ if ($action === 'delete' && $server_id) {
                             <label for="priority"><?php _e('Priorité', 'postal-warmup'); ?></label>
                         </th>
                         <td>
-                            <input type="number" id="priority" name="priority" class="small-text" value="10">
+                            <input type="number" id="priority" name="priority" class="small-text" value="<?php echo esc_attr($server['priority']); ?>">
                             <p class="description"><?php _e('Plus haut = prioritaire. Défaut : 10.', 'postal-warmup'); ?></p>
                         </td>
                     </tr>
@@ -193,9 +193,9 @@ if ($action === 'delete' && $server_id) {
                         </th>
                         <td>
                             <select id="timezone" name="timezone">
-                                <option value="UTC">UTC</option>
+                                <option value="UTC" <?php selected($server['timezone'], 'UTC'); ?>>UTC</option>
                                 <?php foreach (timezone_identifiers_list() as $tz) {
-                                    echo '<option value="' . esc_attr($tz) . '">' . esc_html($tz) . '</option>';
+                                    echo '<option value="' . esc_attr($tz) . '" ' . selected($server['timezone'], $tz, false) . '>' . esc_html($tz) . '</option>';
                                 } ?>
                             </select>
                         </td>

@@ -37,13 +37,37 @@ $total_pages = ceil($total / $per_page);
     <a href="#" id="pw-process-queue-btn" class="page-title-action">Forcer l'envoi immédiat (Cron)</a>
 
     <?php
-    $retention = get_option('pw_queue_retention_days', 7);
+    $retention = get_option('pw_queue_retention_days', 30);
+    $health = \PostalWarmup\Services\QueueManager::get_health_stats();
     ?>
     <p class="description" style="display:inline-block; margin-left: 10px;">
-        (Rétention : <?php echo $retention; ?> jours pour les messages traités)
+        (Rétention : <?php echo $retention; ?> jours)
     </p>
 
     <hr class="wp-header-end">
+
+    <div class="pw-health-monitor">
+        <div class="pw-health-card">
+            <h3>En attente</h3>
+            <div class="pw-health-value"><?php echo $health['pending']; ?></div>
+        </div>
+        <div class="pw-health-card">
+            <h3>En cours</h3>
+            <div class="pw-health-value"><?php echo $health['processing']; ?></div>
+        </div>
+        <div class="pw-health-card">
+            <h3>Envoyés (24h)</h3>
+            <div class="pw-health-value success"><?php echo $health['sent_24h']; ?></div>
+        </div>
+        <div class="pw-health-card">
+            <h3>Échecs (24h)</h3>
+            <div class="pw-health-value error"><?php echo $health['failed_24h']; ?></div>
+        </div>
+        <div class="pw-health-card">
+            <h3>Top ISP</h3>
+            <div class="pw-health-value small"><?php echo esc_html($health['top_isp']); ?></div>
+        </div>
+    </div>
 
     <div class="tablenav top">
         <div class="alignleft actions">
@@ -164,6 +188,26 @@ $total_pages = ceil($total / $per_page);
 .status-processing { background: #fff8e5; color: #996800; border: 1px solid #f0c33c; }
 .status-sent { background: #edfaef; color: #005a1e; border: 1px solid #7cc18b; }
 .status-failed { background: #fbeaea; color: #d63638; border: 1px solid #f56e28; }
+.pw-health-monitor {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    background: #fff;
+    padding: 15px;
+    border: 1px solid #c3c4c7;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.04);
+}
+.pw-health-card {
+    flex: 1;
+    text-align: center;
+    border-right: 1px solid #eee;
+}
+.pw-health-card:last-child { border-right: none; }
+.pw-health-card h3 { margin: 0 0 5px; font-size: 12px; color: #646970; text-transform: uppercase; }
+.pw-health-value { font-size: 24px; font-weight: 600; color: #1d2327; }
+.pw-health-value.success { color: #00a32a; }
+.pw-health-value.error { color: #d63638; }
+.pw-health-value.small { font-size: 18px; }
 .pw-isp-badge {
     display: inline-block;
     background: #e5e7eb;

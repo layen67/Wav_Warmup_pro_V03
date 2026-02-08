@@ -72,11 +72,16 @@ class QueueManager {
                 }
             }
 
-            // 3. Check ISP Limits
-            if ( ! empty( $settings['isp_limits'] ) && is_array( $settings['isp_limits'] ) ) {
-                $isp_name = $item['isp'];
-                if ( isset( $settings['isp_limits'][$isp_name] ) ) {
-                    $limit_isp = (int) $settings['isp_limits'][$isp_name];
+            // 3. Check ISP Limits (From DB Manager)
+            $isp_name = $item['isp'];
+            if ( $isp_name !== 'Other' ) {
+                // Get limit from DB (cached?)
+                // For performance, we could cache all ISP limits once at start of loop?
+                // But this runs in CRON, query is fine.
+                $isp_data = $wpdb->get_row( $wpdb->prepare( "SELECT daily_limit FROM {$wpdb->prefix}postal_isps WHERE name = %s", $isp_name ), ARRAY_A );
+
+                if ( $isp_data ) {
+                    $limit_isp = (int) $isp_data['daily_limit'];
                     if ( $limit_isp > 0 ) {
                         $usage_isp = Stats::get_isp_daily_usage( $isp_name );
                         if ( $usage_isp >= $limit_isp ) {
@@ -207,25 +212,70 @@ class QueueManager {
      */
     public static function cleanup() {
         global $wpdb;
-        $table = $wpdb->prefix . 'postal_queue';
+        $table_queue = $wpdb->prefix . 'postal_queue';
+        $table_logs = $wpdb->prefix . 'postal_logs';
 
-        // Récupérer le délai de rétention (défaut: 7 jours)
-        // Note: Option stockée individuellement via Settings.php
-        $days = (int) get_option('pw_queue_retention_days', 7);
-        if ($days < 1) $days = 7;
+        // Rétention Queue : défaut 30 jours (ou option)
+        $days_queue = (int) get_option('pw_queue_retention_days', 30);
+        $date_queue = date('Y-m-d H:i:s', strtotime("-$days_queue days"));
 
-        $date_limit = date('Y-m-d H:i:s', strtotime("-$days days"));
+        // Rétention Logs : défaut 60 jours (ou option)
+        $days_logs = (int) get_option('pw_log_retention_days', 60);
+        $date_logs = date('Y-m-d H:i:s', strtotime("-$days_logs days"));
 
-        // Supprimer les éléments terminés (envoyés ou échoués)
-        $result = $wpdb->query($wpdb->prepare(
-            "DELETE FROM $table WHERE status IN ('sent', 'failed') AND updated_at < %s",
-            $date_limit
+        // Supprimer les éléments terminés de la queue
+        $wpdb->query($wpdb->prepare(
+            "DELETE FROM $table_queue WHERE status IN ('sent', 'failed') AND updated_at < %s",
+            $date_queue
         ));
 
-        if ($result !== false) {
-            Logger::info("Queue: Nettoyage terminé. $result éléments supprimés (Rétention: $days jours).");
-        } else {
-            Logger::error("Queue: Erreur lors du nettoyage de la base de données.");
+        // Supprimer les logs
+        $wpdb->query($wpdb->prepare(
+            "DELETE FROM $table_logs WHERE created_at < %s",
+            $date_logs
+        ));
+
+        Logger::info("Maintenance: Nettoyage effectué (Queue < $date_queue, Logs < $date_logs).");
+    }
+
+    public static function get_health_stats() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'postal_queue';
+
+        $stats = [
+            'pending' => 0,
+            'processing' => 0,
+            'sent_24h' => 0,
+            'failed_24h' => 0,
+            'top_isp' => 'N/A',
+            'top_server' => 'N/A'
+        ];
+
+        // Counts
+        $counts = $wpdb->get_results("SELECT status, COUNT(*) as count FROM $table GROUP BY status", ARRAY_A);
+        foreach ($counts as $row) {
+            if ($row['status'] === 'pending') $stats['pending'] = $row['count'];
+            if ($row['status'] === 'processing') $stats['processing'] = $row['count'];
         }
+
+        // 24h Activity
+        $yesterday = date('Y-m-d H:i:s', strtotime('-24 hours'));
+        $activity = $wpdb->get_results($wpdb->prepare(
+            "SELECT status, COUNT(*) as count FROM $table WHERE updated_at >= %s GROUP BY status",
+            $yesterday
+        ), ARRAY_A);
+        foreach ($activity as $row) {
+            if ($row['status'] === 'sent') $stats['sent_24h'] = $row['count'];
+            if ($row['status'] === 'failed') $stats['failed_24h'] = $row['count'];
+        }
+
+        // Top ISP (Last 24h)
+        $top_isp = $wpdb->get_var($wpdb->prepare(
+            "SELECT isp FROM $table WHERE updated_at >= %s AND isp != 'Other' GROUP BY isp ORDER BY COUNT(*) DESC LIMIT 1",
+            $yesterday
+        ));
+        if ($top_isp) $stats['top_isp'] = $top_isp;
+
+        return $stats;
     }
 }

@@ -41,14 +41,18 @@ class ISPDetector {
             }
         }
 
-        // Vérifier les règles personnalisées (depuis les options)
-        $custom_rules = get_option( 'pw_custom_isp_rules', [] );
-        if ( ! empty( $custom_rules ) && is_array( $custom_rules ) ) {
+        // Vérifier les règles personnalisées (Depuis DB)
+        global $wpdb;
+        $table = $wpdb->prefix . 'postal_isps';
+        $custom_rules = $wpdb->get_results( "SELECT name, regex FROM $table", ARRAY_A );
+
+        if ( ! empty( $custom_rules ) ) {
             foreach ( $custom_rules as $rule ) {
                 if ( ! empty( $rule['name'] ) && ! empty( $rule['regex'] ) ) {
-                    // Sécuriser la regex
-                    $regex = '/' . trim( $rule['regex'], '/' ) . '/i';
-                    if ( @preg_match( $regex, $email ) ) {
+                    // Sécuriser la regex (on suppose qu'elle est stockée sans délimiteurs ou avec)
+                    // Pour simplifier, on enlève les délimiteurs potentiels et on ajoute /i
+                    $pattern = trim( $rule['regex'], '/' );
+                    if ( @preg_match( '/' . $pattern . '/i', $email ) ) {
                         return $rule['name'];
                     }
                 }

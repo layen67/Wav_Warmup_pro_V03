@@ -284,6 +284,21 @@ class Activator {
 			KEY idx_isp (isp)
 		) $charset_collate;";
 		dbDelta( $sql_queue );
+
+		// 14. Custom ISPs
+		$table_isps = $wpdb->prefix . 'postal_isps';
+		$sql_isps = "CREATE TABLE $table_isps (
+			id bigint NOT NULL AUTO_INCREMENT,
+			name varchar(50) NOT NULL,
+			regex varchar(255) NOT NULL,
+			daily_limit int DEFAULT 0,
+			hourly_limit int DEFAULT 0,
+			warmup_score int DEFAULT 10,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY name (name)
+		) $charset_collate;";
+		dbDelta( $sql_isps );
 	}
 
 	private static function set_default_options() {

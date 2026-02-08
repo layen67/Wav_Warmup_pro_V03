@@ -37,6 +37,7 @@ class Admin {
 		add_submenu_page( 'postal-warmup', __( 'Statistiques', 'postal-warmup' ), __( 'Statistiques', 'postal-warmup' ), 'manage_options', 'postal-warmup-stats', [ $this, 'display_stats' ] );
 		add_submenu_page( 'postal-warmup', __( 'Logs', 'postal-warmup' ), __( 'Logs', 'postal-warmup' ), 'manage_options', 'postal-warmup-logs', [ $this, 'display_logs' ] );
 		add_submenu_page( 'postal-warmup', __( 'Paramètres', 'postal-warmup' ), __( 'Paramètres', 'postal-warmup' ), 'manage_options', 'postal-warmup-settings', [ $this, 'display_settings' ] );
+		add_submenu_page( 'postal-warmup', __( 'Gestion ISP', 'postal-warmup' ), __( 'Gestion ISP', 'postal-warmup' ), 'manage_options', 'postal-warmup-isps', [ $this, 'display_isps' ] );
 	}
 
 	public function enqueue_styles( $hook ) {
@@ -98,6 +99,7 @@ class Admin {
 	public function display_stats() { require_once PW_ADMIN_DIR . 'partials/stats.php'; }
 	public function display_logs() { require_once PW_ADMIN_DIR . 'partials/logs.php'; }
 	public function display_settings() { require_once PW_ADMIN_DIR . 'partials/settings.php'; }
+	public function display_isps() { require_once PW_ADMIN_DIR . 'partials/isps.php'; }
 
 	public function display_admin_notices() {
 		if ( get_transient( 'pw_activation_notice' ) ) {
