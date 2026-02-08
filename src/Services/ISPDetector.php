@@ -5,74 +5,74 @@ namespace PostalWarmup\Services;
 class ISPDetector {
 
     /**
-     * Liste des regex pour détecter les ISP
-     */
-    private static $isp_rules = [
-        'Google' => '/@(gmail|googlemail|google)\./i',
-        'Yahoo' => '/@(yahoo|ymail|rocketmail)\./i',
-        'Microsoft' => '/@(outlook|hotmail|live|msn|windowslive)\./i',
-        'Apple' => '/@(icloud|me|mac)\./i',
-        'AOL' => '/@(aol|aim)\./i',
-        'Yandex' => '/@(yandex|ya)\./i',
-        'Proton' => '/@(protonmail|proton|pm)\./i',
-        'Zoho' => '/@(zoho|zohomail)\./i',
-        'GMX' => '/@(gmx|mail\.com)\./i',
-        'Orange' => '/@(orange|wanadoo)\./i',
-        'SFR' => '/@(sfr|neuf|club-internet)\./i',
-        'Free' => '/@(free|aliceadsl)\./i',
-        'T-Online' => '/@(t-online)\./i',
-        'Mail.ru' => '/@(mail|list|in|bk)\.ru/i',
-        'Libero' => '/@(libero|inwind|iol)\.it/i',
-    ];
-
-    /**
-     * Détecte l'ISP à partir d'une adresse email
+     * Détecte l'ISP à partir d'une adresse email.
+     * Utilise d'abord les règles DB, puis fallback sur des regex par défaut si la DB est vide.
      *
      * @param string $email
-     * @return string Nom de l'ISP ou 'Other'
+     * @return string Identifiant de l'ISP (clé normalisée) ou 'other'
      */
     public static function detect( string $email ): string {
         $email = strtolower( trim( $email ) );
 
-        // Vérifier les règles par défaut
-        foreach ( self::$isp_rules as $isp => $regex ) {
-            if ( preg_match( $regex, $email ) ) {
-                return $isp;
-            }
-        }
-
-        // Vérifier les règles personnalisées (Depuis DB)
+        // 1. Récupérer les règles depuis la DB
         global $wpdb;
         $table = $wpdb->prefix . 'postal_isps';
-        $custom_rules = $wpdb->get_results( "SELECT name, regex FROM $table", ARRAY_A );
 
-        if ( ! empty( $custom_rules ) ) {
-            foreach ( $custom_rules as $rule ) {
-                if ( ! empty( $rule['name'] ) && ! empty( $rule['regex'] ) ) {
-                    // Sécuriser la regex (on suppose qu'elle est stockée sans délimiteurs ou avec)
-                    // Pour simplifier, on enlève les délimiteurs potentiels et on ajoute /i
-                    $pattern = trim( $rule['regex'], '/' );
-                    if ( @preg_match( '/' . $pattern . '/i', $email ) ) {
-                        return $rule['name'];
+        // Note: Idéalement, mettre en cache pour perf
+        $rules = $wpdb->get_results( "SELECT isp_key, domains FROM $table WHERE active = 1", ARRAY_A );
+
+        if ( ! empty( $rules ) ) {
+            foreach ( $rules as $rule ) {
+                $domains = json_decode( $rule['domains'], true );
+                if ( ! is_array( $domains ) ) continue; // Skip invalid JSON
+
+                foreach ( $domains as $domain ) {
+                    // Match exact domain part (e.g. @gmail.com)
+                    // We check if email ENDS with @domain
+                    if ( str_ends_with( $email, '@' . strtolower( trim( $domain ) ) ) ) {
+                        return $rule['isp_key'];
                     }
+                }
+            }
+        } else {
+            // Fallback Legacy Regex (si table vide/installation initiale)
+            // Ces règles devraient être migrées en DB lors de l'activation
+            $legacy_rules = [
+                'gmail' => '/@(gmail|googlemail|google)\./i',
+                'yahoo' => '/@(yahoo|ymail|rocketmail)\./i',
+                'outlook' => '/@(outlook|hotmail|live|msn|windowslive)\./i',
+                'icloud' => '/@(icloud|me|mac)\./i',
+                'aol' => '/@(aol|aim)\./i',
+                'yandex' => '/@(yandex|ya)\./i',
+                'proton' => '/@(protonmail|proton|pm)\./i',
+                'zoho' => '/@(zoho|zohomail)\./i',
+                'gmx' => '/@(gmx|mail\.com)\./i',
+                'orange' => '/@(orange|wanadoo)\./i',
+                'sfr' => '/@(sfr|neuf|club-internet)\./i',
+                'free' => '/@(free|aliceadsl)\./i',
+                't-online' => '/@(t-online)\./i',
+                'mailru' => '/@(mail|list|in|bk)\.ru/i',
+                'libero' => '/@(libero|inwind|iol)\.it/i',
+            ];
+
+            foreach ( $legacy_rules as $key => $regex ) {
+                if ( preg_match( $regex, $email ) ) {
+                    return $key;
                 }
             }
         }
 
-        return 'Other';
+        return 'other';
     }
 
     /**
-     * Retourne la liste des ISP connus
+     * Retourne la liste des ISP connus (clés)
      */
     public static function get_known_isps(): array {
-        $isps = array_keys( self::$isp_rules );
-        $custom = get_option( 'pw_custom_isp_rules', [] );
-        if ( ! empty( $custom ) ) {
-            foreach ( $custom as $rule ) {
-                $isps[] = $rule['name'];
-            }
-        }
-        return array_unique( $isps );
+        global $wpdb;
+        $table = $wpdb->prefix . 'postal_isps';
+        $results = $wpdb->get_col( "SELECT DISTINCT isp_key FROM $table WHERE active = 1" );
+
+        return ! empty( $results ) ? $results : [ 'gmail', 'yahoo', 'outlook', 'other' ];
     }
 }

@@ -285,20 +285,43 @@ class Activator {
 		) $charset_collate;";
 		dbDelta( $sql_queue );
 
-		// 14. Custom ISPs
+		// 14. Custom ISPs (Refonte Profils)
 		$table_isps = $wpdb->prefix . 'postal_isps';
 		$sql_isps = "CREATE TABLE $table_isps (
 			id bigint NOT NULL AUTO_INCREMENT,
-			name varchar(50) NOT NULL,
-			regex varchar(255) NOT NULL,
-			daily_limit int DEFAULT 0,
-			hourly_limit int DEFAULT 0,
-			warmup_score int DEFAULT 10,
+			isp_key varchar(50) NOT NULL,
+			isp_label varchar(100) NOT NULL,
+			domains longtext NOT NULL,
+			max_daily int DEFAULT 0,
+			max_hourly int DEFAULT 0,
+			strategy varchar(50) DEFAULT 'slow_rise',
+			hour_start tinyint DEFAULT 8,
+			hour_end tinyint DEFAULT 18,
+			timezone varchar(50) DEFAULT 'UTC',
+			active tinyint(1) DEFAULT 1,
 			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
-			UNIQUE KEY name (name)
+			UNIQUE KEY isp_key (isp_key)
 		) $charset_collate;";
 		dbDelta( $sql_isps );
+
+		// 15. Server ISP Stats (Réputation & Perf)
+		$table_server_isp = $wpdb->prefix . 'postal_server_isp_stats';
+		$sql_server_isp = "CREATE TABLE $table_server_isp (
+			id bigint NOT NULL AUTO_INCREMENT,
+			server_id int NOT NULL,
+			isp_key varchar(50) NOT NULL,
+			score int DEFAULT 100,
+			sent_today int DEFAULT 0,
+			delivered_today int DEFAULT 0,
+			fails_today int DEFAULT 0,
+			last_updated datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			UNIQUE KEY unique_stat (server_id, isp_key),
+			KEY idx_server (server_id),
+			KEY idx_isp (isp_key)
+		) $charset_collate;";
+		dbDelta( $sql_server_isp );
 	}
 
 	private static function set_default_options() {

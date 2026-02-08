@@ -401,24 +401,13 @@ class AjaxHandler {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
 
-		$id = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
-		$name = sanitize_text_field( $_POST['name'] );
-		$regex = sanitize_text_field( $_POST['regex'] );
+		// Map $_POST to ISPManager::save expected format
+		// Note: The form sends 'isp_label', 'domains' (string), etc.
 
-		if ( $id > 0 ) {
-			$result = ISPManager::update( $id, [
-				'name' => $name,
-				'regex' => $regex,
-				'daily_limit' => (int)$_POST['daily_limit'],
-				'hourly_limit' => (int)$_POST['hourly_limit'],
-				'warmup_score' => (int)$_POST['warmup_score']
-			]);
-		} else {
-			$result = ISPManager::add( $name, $regex, (int)$_POST['daily_limit'], (int)$_POST['hourly_limit'], (int)$_POST['warmup_score'] );
-		}
+		$result = ISPManager::save( $_POST );
 
 		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
-		else wp_send_json_success();
+		else wp_send_json_success( [ 'id' => $result ] );
 	}
 
 	public function ajax_delete_isp() {

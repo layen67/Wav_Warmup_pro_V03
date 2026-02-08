@@ -7,40 +7,42 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 use PostalWarmup\Admin\ISPManager;
 
-// Handle Form Submission (Simple Post for now or AJAX? Let's use AJAX for consistency with the plugin style, but a simple form is faster to implement. The plugin uses AJAX heavily. I'll stick to AJAX logic or simple PHP form if easier. Given I need to add AJAX handlers anyway, I'll use a mix or just simple PHP for stability if I don't want to touch JS too much. But the user asked for "Interface admin ... Add / Modify". I'll use a simple PHP POST handler here to avoid complex JS if possible, but the plugin seems to rely on JS. I'll use a simple table + modal pattern.)
-
 ?>
 <div class="wrap">
-    <h1 class="wp-heading-inline">Gestion des FAI (ISP)</h1>
-    <button class="page-title-action" id="pw-add-isp-btn">Ajouter un ISP</button>
+    <h1 class="wp-heading-inline">Gestion des Profils ISP</h1>
+    <button class="page-title-action" id="pw-add-isp-btn">Ajouter un Profil</button>
     <hr class="wp-header-end">
-
-    <div id="pw-isp-response"></div>
 
     <table class="wp-list-table widefat fixed striped">
         <thead>
             <tr>
-                <th>Nom</th>
-                <th>Regex</th>
+                <th>Nom du Profil</th>
+                <th>Domaines Associés</th>
                 <th>Quota Jour</th>
                 <th>Quota Heure</th>
-                <th>Score Warmup</th>
+                <th>Plage Horaire</th>
+                <th>Stratégie</th>
+                <th>Statut</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody id="pw-isp-list">
-            <!-- Populated via JS or PHP -->
             <?php
             $isps = ISPManager::get_all();
             if ( empty( $isps ) ): ?>
-                <tr><td colspan="6">Aucun ISP personnalisé.</td></tr>
-            <?php else: foreach ( $isps as $isp ): ?>
+                <tr><td colspan="8">Aucun profil ISP configuré.</td></tr>
+            <?php else: foreach ( $isps as $isp ):
+                $domains_list = implode(', ', $isp['domains']);
+                if (strlen($domains_list) > 50) $domains_list = substr($domains_list, 0, 50) . '...';
+            ?>
                 <tr data-id="<?php echo esc_attr($isp['id']); ?>" data-json="<?php echo esc_attr(json_encode($isp)); ?>">
-                    <td><strong><?php echo esc_html($isp['name']); ?></strong></td>
-                    <td><code><?php echo esc_html($isp['regex']); ?></code></td>
-                    <td><?php echo $isp['daily_limit'] > 0 ? $isp['daily_limit'] : '∞'; ?></td>
-                    <td><?php echo $isp['hourly_limit'] > 0 ? $isp['hourly_limit'] : '∞'; ?></td>
-                    <td><?php echo $isp['warmup_score']; ?></td>
+                    <td><strong><?php echo esc_html($isp['isp_label']); ?></strong><br><small style="color:#888"><?php echo esc_html($isp['isp_key']); ?></small></td>
+                    <td><?php echo esc_html($domains_list); ?></td>
+                    <td><?php echo $isp['max_daily'] > 0 ? $isp['max_daily'] : '∞'; ?></td>
+                    <td><?php echo $isp['max_hourly'] > 0 ? $isp['max_hourly'] : '∞'; ?></td>
+                    <td><?php echo $isp['hour_start']; ?>h - <?php echo $isp['hour_end']; ?>h <br><small><?php echo esc_html($isp['timezone']); ?></small></td>
+                    <td><?php echo esc_html($isp['strategy']); ?></td>
+                    <td><?php echo $isp['active'] ? '<span class="pw-badge success">Actif</span>' : '<span class="pw-badge error">Inactif</span>'; ?></td>
                     <td>
                         <button class="button pw-edit-isp">Éditer</button>
                         <button class="button pw-delete-isp" style="color: #b32d2e; border-color: #b32d2e;">Supprimer</button>
@@ -53,38 +55,76 @@ use PostalWarmup\Admin\ISPManager;
 
 <!-- Modal -->
 <div id="pw-isp-modal" class="pw-modal" style="display:none;">
-    <div class="pw-modal-content">
+    <div class="pw-modal-content pw-modal-lg">
         <div class="pw-modal-header">
-            <h2 id="pw-isp-modal-title">Ajouter un ISP</h2>
+            <h2 id="pw-isp-modal-title">Configurer un Profil ISP</h2>
             <button class="pw-modal-close">&times;</button>
         </div>
         <div class="pw-modal-body">
             <form id="pw-isp-form">
                 <input type="hidden" name="id" id="pw-isp-id">
-                <p>
-                    <label>Nom de l'ISP</label>
-                    <input type="text" name="name" id="pw-isp-name" class="widefat" required placeholder="Ex: Orange">
-                </p>
-                <p>
-                    <label>Regex de détection</label>
-                    <input type="text" name="regex" id="pw-isp-regex" class="widefat" required placeholder="Ex: @(orange|wanadoo)\.">
-                    <span class="description">Expression régulière sans délimiteurs (sera entourée par /.../i)</span>
-                </p>
-                <div style="display:flex; gap:10px;">
-                    <p style="flex:1;">
-                        <label>Quota Journalier</label>
-                        <input type="number" name="daily_limit" id="pw-isp-daily" class="widefat" value="0">
-                    </p>
-                    <p style="flex:1;">
-                        <label>Quota Horaire</label>
-                        <input type="number" name="hourly_limit" id="pw-isp-hourly" class="widefat" value="0">
-                    </p>
+
+                <div class="pw-form-group">
+                    <label>Nom du Profil (Label)</label>
+                    <input type="text" name="isp_label" id="pw-isp-label" class="widefat" required placeholder="Ex: Gmail Corporate">
                 </div>
-                <p>
-                    <label>Score Warmup (Malus/Bonus)</label>
-                    <input type="number" name="warmup_score" id="pw-isp-score" class="widefat" value="10">
-                    <span class="description">Score ajouté au Load Balancer (défaut 10).</span>
-                </p>
+
+                <div class="pw-form-group">
+                    <label>Domaines associés (séparés par virgules)</label>
+                    <textarea name="domains" id="pw-isp-domains" class="widefat" rows="3" placeholder="gmail.com, googlemail.com"></textarea>
+                    <p class="description">Tous les emails se terminant par ces domaines utiliseront ce profil.</p>
+                </div>
+
+                <div style="display:flex; gap:15px; margin-bottom:15px;">
+                    <div style="flex:1;">
+                        <label>Quota Journalier</label>
+                        <input type="number" name="max_daily" id="pw-isp-daily" class="widefat" value="0">
+                    </div>
+                    <div style="flex:1;">
+                        <label>Quota Horaire</label>
+                        <input type="number" name="max_hourly" id="pw-isp-hourly" class="widefat" value="0">
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:15px; margin-bottom:15px;">
+                    <div style="flex:1;">
+                        <label>Heure Début</label>
+                        <select name="hour_start" id="pw-isp-start" class="widefat">
+                            <?php for($i=0; $i<24; $i++) echo "<option value='$i'>{$i}h</option>"; ?>
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <label>Heure Fin</label>
+                        <select name="hour_end" id="pw-isp-end" class="widefat">
+                            <?php for($i=0; $i<24; $i++) echo "<option value='$i' " . ($i==18?'selected':'') . ">{$i}h</option>"; ?>
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <label>Fuseau Horaire</label>
+                        <select name="timezone" id="pw-isp-timezone" class="widefat">
+                            <option value="UTC">UTC</option>
+                            <?php foreach(timezone_identifiers_list() as $tz) echo "<option value='$tz'>$tz</option>"; ?>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="pw-form-group">
+                    <label>Stratégie de Warmup</label>
+                    <select name="strategy" id="pw-isp-strategy" class="widefat">
+                        <option value="slow_rise">Douce (Slow Rise)</option>
+                        <option value="aggressive">Agressive</option>
+                        <option value="staged">Par Paliers (Staged)</option>
+                        <option value="fixed">Fixe (Maintenance)</option>
+                    </select>
+                </div>
+
+                <div class="pw-form-group">
+                    <label>
+                        <input type="checkbox" name="active" id="pw-isp-active" value="1" checked>
+                        Activer ce profil
+                    </label>
+                </div>
+
             </form>
         </div>
         <div class="pw-modal-footer">
@@ -100,7 +140,7 @@ jQuery(document).ready(function($) {
     $('#pw-add-isp-btn').on('click', function() {
         $('#pw-isp-form')[0].reset();
         $('#pw-isp-id').val('');
-        $('#pw-isp-modal-title').text('Ajouter un ISP');
+        $('#pw-isp-modal-title').text('Ajouter un Profil ISP');
         $('#pw-isp-modal').show();
     });
 
@@ -110,13 +150,17 @@ jQuery(document).ready(function($) {
         var data = tr.data('json');
 
         $('#pw-isp-id').val(data.id);
-        $('#pw-isp-name').val(data.name);
-        $('#pw-isp-regex').val(data.regex);
-        $('#pw-isp-daily').val(data.daily_limit);
-        $('#pw-isp-hourly').val(data.hourly_limit);
-        $('#pw-isp-score').val(data.warmup_score);
+        $('#pw-isp-label').val(data.isp_label);
+        $('#pw-isp-domains').val(data.domains ? data.domains.join(', ') : '');
+        $('#pw-isp-daily').val(data.max_daily);
+        $('#pw-isp-hourly').val(data.max_hourly);
+        $('#pw-isp-start').val(data.hour_start);
+        $('#pw-isp-end').val(data.hour_end);
+        $('#pw-isp-timezone').val(data.timezone);
+        $('#pw-isp-strategy').val(data.strategy);
+        $('#pw-isp-active').prop('checked', data.active == 1);
 
-        $('#pw-isp-modal-title').text('Modifier l\'ISP');
+        $('#pw-isp-modal-title').text('Modifier Profil : ' + data.isp_label);
         $('#pw-isp-modal').show();
     });
 
@@ -130,18 +174,10 @@ jQuery(document).ready(function($) {
         var btn = $(this);
         btn.prop('disabled', true);
 
-        var data = {
-            action: 'pw_save_isp',
-            nonce: pwAdmin.nonce,
-            id: $('#pw-isp-id').val(),
-            name: $('#pw-isp-name').val(),
-            regex: $('#pw-isp-regex').val(),
-            daily_limit: $('#pw-isp-daily').val(),
-            hourly_limit: $('#pw-isp-hourly').val(),
-            warmup_score: $('#pw-isp-score').val()
-        };
+        var formData = $('#pw-isp-form').serialize();
+        formData += '&action=pw_save_isp&nonce=' + pwAdmin.nonce;
 
-        $.post(pwAdmin.ajaxurl, data, function(res) {
+        $.post(pwAdmin.ajaxurl, formData, function(res) {
             btn.prop('disabled', false);
             if(res.success) {
                 location.reload();
@@ -153,7 +189,7 @@ jQuery(document).ready(function($) {
 
     // Delete
     $('.pw-delete-isp').on('click', function() {
-        if(!confirm('Supprimer cet ISP ?')) return;
+        if(!confirm('Supprimer ce profil ISP ?')) return;
         var id = $(this).closest('tr').data('id');
         $.post(pwAdmin.ajaxurl, {
             action: 'pw_delete_isp',
@@ -174,10 +210,15 @@ jQuery(document).ready(function($) {
     display: flex; justify-content: center; align-items: center;
 }
 .pw-modal-content {
-    background: #fff; padding: 20px; width: 500px; max-width: 90%;
+    background: #fff; padding: 20px; width: 600px; max-width: 90%;
     box-shadow: 0 4px 10px rgba(0,0,0,0.2); border-radius: 5px;
 }
 .pw-modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
 .pw-modal-footer { border-top: 1px solid #eee; padding-top: 15px; margin-top: 15px; text-align: right; }
 .pw-modal-close { background: none; border: none; font-size: 20px; cursor: pointer; }
+.pw-form-group { margin-bottom: 15px; }
+.pw-form-group label { display: block; font-weight: 600; margin-bottom: 5px; }
+.pw-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; color: #fff; }
+.pw-badge.success { background: #46b450; }
+.pw-badge.error { background: #dc3232; }
 </style>
