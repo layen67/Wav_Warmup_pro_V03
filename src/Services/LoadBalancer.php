@@ -16,7 +16,7 @@ class LoadBalancer {
      * @return array|null Le serveur sélectionné ou null
      */
     public static function select_server( $template_id_or_name, $context_or_ignore_limits = [] ) {
-        // Normalisation du contexte (Compatibilité V2)
+        // Normalisation du contexte
         if ( is_bool( $context_or_ignore_limits ) ) {
             $context = [ 'ignore_limits' => $context_or_ignore_limits ];
         } else {
@@ -24,21 +24,9 @@ class LoadBalancer {
         }
 
         $ignore_limits = $context['ignore_limits'] ?? false;
-        $target_isp = $context['isp'] ?? null;
 
-        // 1. Récupérer le template pour connaître son fuseau horaire
-        global $wpdb;
-        $table_tpl = $wpdb->prefix . 'postal_templates';
-
-        $timezone = null;
-        if ( is_numeric( $template_id_or_name ) ) {
-            $timezone = $wpdb->get_var( $wpdb->prepare( "SELECT timezone FROM $table_tpl WHERE id = %d", $template_id_or_name ) );
-        } else {
-            $timezone = $wpdb->get_var( $wpdb->prepare( "SELECT timezone FROM $table_tpl WHERE name = %s", $template_id_or_name ) );
-        }
-
-        // 2. Récupérer les serveurs actifs
-        $servers = Database::get_servers( true ); // only active
+        // 1. Récupérer les serveurs actifs
+        $servers = Database::get_servers( true ); // active = 1
 
         if ( empty( $servers ) ) {
             Logger::error( 'LoadBalancer: Aucun serveur actif disponible.' );
@@ -46,102 +34,96 @@ class LoadBalancer {
         }
 
         $eligible_servers = [];
+        $full_servers = []; // For fallback in ignore_limits mode
 
         foreach ( $servers as $server ) {
-            // Check Daily Limit (Dynamic or Static)
-            $limit = Stats::get_dynamic_limit( $server );
-            $usage = Stats::get_server_daily_usage( $server['id'] );
+            $server_id = (int) $server['id'];
 
-            // Check Server Global Limit
-            if ( ! $ignore_limits && $limit > 0 ) {
-                if ( $usage >= $limit ) {
-                    continue; // Capacity reached
+            // Calculer les métriques
+            $limit = Stats::get_dynamic_limit( $server );
+            $usage = Stats::get_server_daily_usage( $server_id );
+            $remaining = $limit > 0 ? max( 0, $limit - $usage ) : 999999;
+            $usage_percent = $limit > 0 ? ( $usage / $limit ) * 100 : 0;
+
+            $server['metrics'] = [
+                'usage' => $usage,
+                'limit' => $limit,
+                'remaining' => $remaining,
+                'usage_percent' => $usage_percent,
+                'priority' => (int) ( $server['priority'] ?? 10 )
+            ];
+
+            // Vérification capacité
+            if ( $limit > 0 && $usage >= $limit ) {
+                $full_servers[] = $server;
+                if ( ! $ignore_limits ) {
+                    continue; // Skip if full and strict mode
                 }
             }
-
-            // Check ISP Limit (if sending)
-            /*
-             * Note: ISP Limits are global (all servers combined) or per server?
-             * The prompt says "par jour, par ISP, par template, par serveur".
-             * Usually ISP limits are domain-reputation bound, so per sending domain (server).
-             * But Stats::get_isp_daily_usage currently counts GLOBAL usage for that ISP.
-             * If the limit is global, we should check it in QueueManager before calling LoadBalancer?
-             * Or check it here?
-             * Let's assume ISP limits are enforced in QueueManager as implemented previously.
-             * Here we focus on balancing load between servers.
-             */
-
-            // Add metrics for scoring
-            $server['metrics'] = [
-                'usage_today' => $usage,
-                'limit' => $limit,
-                'warmup_day' => isset( $server['warmup_day'] ) ? (int)$server['warmup_day'] : 1,
-                'reputation' => 100, // Placeholder
-                'priority' => isset( $server['priority'] ) ? (int)$server['priority'] : 10
-            ];
 
             $eligible_servers[] = $server;
         }
 
+        // Cas : Tous complets
         if ( empty( $eligible_servers ) ) {
-             // Fallback: If ignore_limits is true (Display Mode), return the "best" server even if full
-             if ( $ignore_limits ) {
-                 $eligible_servers = $servers; // Restore all active servers
-             } else {
-                 Logger::warning( "LoadBalancer: Aucun serveur éligible (Tous complets)" );
-                 return null;
-             }
+            if ( $ignore_limits && ! empty( $full_servers ) ) {
+                // En mode affichage (ignore_limits), on prend les serveurs complets si rien d'autre
+                $eligible_servers = $full_servers;
+            } else {
+                Logger::warning( "LoadBalancer: Tous les serveurs sont complets." );
+                return null;
+            }
         }
 
-        // 3. Smart Scoring Algorithm (V3)
-        // Score = (emails_sent_today * 2) + (emails_sent_today_for_isp * 1.5) + (current_warmup_step * 1) - (reputation_score * 3)
-        // Low Score = Better
-
+        // 2. Calcul du score et tri
+        // Score plus bas = Meilleur
         foreach ( $eligible_servers as &$server ) {
-            $m = $server['metrics'] ?? [ 'usage_today' => 0, 'warmup_day' => 1, 'reputation' => 100, 'priority' => 10 ];
+            $m = $server['metrics'];
 
-            $sent_today = $m['usage_today'];
-            $warmup_step = $m['warmup_day'];
-            $reputation = $m['reputation'];
+            // Formule de scoring :
+            // Base : Usage % (0 à 100)
+            // Priorité : Soustraire (Priorité * 5). Priorité 10 => -50. Priorité 1 => -5.
+            // Résultat : Un serveur vide (0%) et haute prio (10) aura -50.
+            // Un serveur plein (90%) et basse prio (1) aura 85.
 
-            // ISP Specific Usage on THIS server?
-            // Since we don't track ISP usage per server easily yet without complex queries,
-            // we'll assume proportional distribution or skip specific ISP-server penalty for now.
-            // But we can check global ISP usage? No, that's constant for all servers.
-            $sent_isp = 0;
+            $score = $m['usage_percent'] - ( $m['priority'] * 5 );
 
-            // Formula
-            $score = ( $sent_today * 2 )
-                   + ( $sent_isp * 1.5 )
-                   + ( $warmup_step * 1 )
-                   - ( $reputation * 3 );
-
-            // Apply Manual Priority Adjustment
-            // Higher priority should Lower the score.
-            // Let's say Priority 10 is normal. Priority 20 is high.
-            // Penalty = (10 - Priority) * 10
-            // P=20 => -100 (Bonus)
-            // P=5 => +50 (Malus)
-            $score += ( 10 - $m['priority'] ) * 10;
+            // Bonus pour "Remaining Capacity" brute ?
+            // Si deux serveurs ont 50%, mais l'un a 1000 restants et l'autre 100.
+            // On préfère celui avec plus de marge.
+            // On soustrait log(remaining) pour donner un léger avantage
+            if ( $m['remaining'] > 0 ) {
+                $score -= log( $m['remaining'] );
+            }
 
             $server['balancing_score'] = $score;
         }
         unset( $server );
 
-        // Sort by Score ASC
+        // Tri ASC
         usort( $eligible_servers, function( $a, $b ) {
             return $a['balancing_score'] <=> $b['balancing_score'];
         } );
 
-        // Return best
-        return $eligible_servers[0];
+        // Retourner le meilleur
+        $selected = $eligible_servers[0];
+
+        // Debug Log (only if strict mode to avoid spamming on display)
+        if ( ! $ignore_limits ) {
+            Logger::debug( "LoadBalancer: Serveur choisi ID {$selected['id']} ({$selected['domain']})", [
+                'score' => round($selected['balancing_score'], 2),
+                'usage' => $selected['metrics']['usage'] . '/' . $selected['metrics']['limit'],
+                'prio'  => $selected['metrics']['priority']
+            ] );
+        }
+
+        return $selected;
     }
 
     /**
-     * Sélectionne le meilleur serveur (alias pour compatibilité)
+     * Alias pour compatibilité
      */
     public static function choose_best_server( $template_id ) {
-        return self::select_server( $template_id, [ 'ignore_limits' => true ] ); // Default to display mode if called directly? Or strict?
-        // Context: "Choisir le meilleur serveur Postal au chargement de la page" -> Shortcode -> Display Mode.
+        return self::select_server( $template_id, [ 'ignore_limits' => true ] );
     }
 }

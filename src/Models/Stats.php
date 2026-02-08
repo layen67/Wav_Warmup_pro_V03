@@ -22,6 +22,20 @@ class Stats {
 		) );
 	}
 
+	public static function get_server_hourly_usage( int $server_id ) {
+		global $wpdb;
+		$stats_table = $wpdb->prefix . 'postal_stats';
+		$date = current_time( 'Y-m-d' );
+		$hour = (int) current_time( 'H' );
+
+		return (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT sent_count FROM $stats_table WHERE server_id = %d AND date = %s AND hour = %d",
+			$server_id,
+			$date,
+			$hour
+		) );
+	}
+
 	public static function get_isp_daily_usage( string $isp ) {
 		global $wpdb;
 		// Check postal_queue which has 'isp' column and status='sent'/'processing'

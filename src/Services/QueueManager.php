@@ -25,11 +25,17 @@ class QueueManager {
             'from_email'   => $from,
             'subject'      => $subject,
             'status'       => 'pending',
-            'scheduled_at' => current_time( 'mysql' ), // Default: ASAP (Cron will handle logic)
+            'scheduled_at' => current_time( 'mysql' ), // Default: ASAP
             'created_at'   => current_time( 'mysql' ),
             'meta'         => json_encode( $meta ),
-            'attempts'     => 0
+            'attempts'     => 0,
+            'isp'          => 'Other' // Will be detected on process
         ];
+
+        // Pre-detect ISP if possible to save time later
+        if ( class_exists( 'PostalWarmup\Services\ISPDetector' ) ) {
+            $data['isp'] = ISPDetector::detect( $to );
+        }
 
         $result = $wpdb->insert( $table, $data );
 
@@ -49,12 +55,14 @@ class QueueManager {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_queue';
 
+        // 1. Load Settings
         $settings = get_option('pw_warmup_settings', []);
         $global_tz = !empty($settings['timezone']) ? $settings['timezone'] : 'UTC';
-        $slots = !empty($settings['schedule']) ? array_map('intval', $settings['schedule']) : [];
+        $slots = !empty($settings['schedule']) ? array_map('intval', $settings['schedule']) : []; // e.g. [8,9,10,...]
 
-        // 2. Fetch Pending Items (Safe Time)
+        // 2. Fetch Pending Items
         $now_mysql = current_time( 'mysql' );
+        // Process in batches
         $items = $wpdb->get_results( $wpdb->prepare(
             "SELECT * FROM $table WHERE status = 'pending' AND scheduled_at <= %s LIMIT 20",
             $now_mysql
@@ -63,193 +71,177 @@ class QueueManager {
         if ( empty( $items ) ) return;
 
         foreach ( $items as $item ) {
-            // Update ISP info (if missing)
-            if ( empty( $item['isp'] ) || $item['isp'] === 'Other' ) {
-                $detected_isp = ISPDetector::detect( $item['to_email'] );
-                if ( $detected_isp !== 'Other' ) {
-                    $wpdb->update( $table, [ 'isp' => $detected_isp ], [ 'id' => $item['id'] ] );
-                    $item['isp'] = $detected_isp;
+            $id = $item['id'];
+            $template_id = $item['template_id'];
+            $isp = $item['isp'];
+
+            // Detect ISP if missing
+            if ( empty( $isp ) || $isp === 'Other' ) {
+                $isp = ISPDetector::detect( $item['to_email'] );
+                if ( $isp !== 'Other' ) {
+                    $wpdb->update( $table, [ 'isp' => $isp ], [ 'id' => $id ] );
+                    $item['isp'] = $isp;
                 }
             }
 
-            // 3. Check ISP Limits (From DB Manager V2)
-            $isp_key = $item['isp'];
-            if ( $isp_key !== 'other' ) {
-                $isp_data = $wpdb->get_row( $wpdb->prepare( "SELECT max_daily, max_hourly, hour_start, hour_end, timezone FROM {$wpdb->prefix}postal_isps WHERE isp_key = %s", $isp_key ), ARRAY_A );
+            // 3. ISP Limits Check
+            if ( $isp !== 'Other' ) {
+                $isp_data = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}postal_isps WHERE isp_key = %s", $isp ), ARRAY_A );
 
                 if ( $isp_data ) {
-                    // Check Daily
+                    // Time Window Check (ISP specific)
+                    if ( ! self::check_isp_time_window( $isp_data ) ) {
+                        self::postpone( $id, '+1 hour' );
+                        continue;
+                    }
+
+                    // Daily Limit
                     $limit_daily = (int) $isp_data['max_daily'];
                     if ( $limit_daily > 0 ) {
-                        $usage_daily = Stats::get_isp_daily_usage( $isp_key );
-                        if ( $usage_daily >= $limit_daily ) {
-                            Logger::info( "Queue: Item #{$item['id']} reporté (Quota Jour ISP {$isp_key}: $usage_daily/$limit_daily)" );
-                            $this->postpone( $item['id'], '+1 hour' );
+                        $used_daily = Stats::get_isp_daily_usage( $isp );
+                        if ( $used_daily >= $limit_daily ) {
+                            Logger::info( "Queue: ISP $isp Daily Limit Reached ($used_daily/$limit_daily)", [ 'item_id' => $id ] );
+                            self::postpone( $id, '+1 hour' );
                             continue;
                         }
                     }
 
-                    // Check Hourly
+                    // Hourly Limit
                     $limit_hourly = (int) $isp_data['max_hourly'];
                     if ( $limit_hourly > 0 ) {
-                        // Need a get_isp_hourly_usage func? Or approximation.
-                        // Let's assume we implement get_isp_hourly_usage in Stats
-                        $usage_hourly = Stats::get_isp_hourly_usage( $isp_key );
-                        if ( $usage_hourly >= $limit_hourly ) {
-                            Logger::info( "Queue: Item #{$item['id']} reporté (Quota Heure ISP {$isp_key}: $usage_hourly/$limit_hourly)" );
-                            $this->postpone( $item['id'], '+1 hour' );
+                        $used_hourly = Stats::get_isp_hourly_usage( $isp );
+                        if ( $used_hourly >= $limit_hourly ) {
+                            Logger::info( "Queue: ISP $isp Hourly Limit Reached ($used_hourly/$limit_hourly)", [ 'item_id' => $id ] );
+                            self::postpone( $id, '+1 hour' );
                             continue;
                         }
                     }
-
-                    // Check ISP Time Window
-                    $isp_tz = $isp_data['timezone'] ?: 'UTC';
-                    try {
-                        $now_isp = new \DateTime( 'now', new \DateTimeZone( $isp_tz ) );
-                        $h = (int) $now_isp->format('G');
-                        $start = (int) $isp_data['hour_start'];
-                        $end = (int) $isp_data['hour_end'];
-
-                        // Handle crossing midnight? Assuming simple start < end for now
-                        if ( $h < $start || $h >= $end ) {
-                            Logger::info( "Queue: Item #{$item['id']} reporté (Hors plage ISP {$isp_key}: {$h}h vs {$start}-{$end}h)" );
-                            $this->postpone( $item['id'], '+1 hour' );
-                            continue;
-                        }
-                    } catch ( \Exception $e ) {}
                 }
             }
 
-            // 4. Check Timezone Per Item
-            // Determine effective timezone: Template > Global
+            // 4. Timezone & Schedule Check
             $timezone = $global_tz;
-            $meta = json_decode( $item['meta'], true );
-
-            // Try to find Template Timezone if not in meta
-            // Note: Template ID in queue table is safer than meta, let's use it
-            if ( ! empty( $item['template_id'] ) ) {
-                $tpl_tz = $wpdb->get_var( $wpdb->prepare( "SELECT timezone FROM {$wpdb->prefix}postal_templates WHERE id = %d", $item['template_id'] ) );
+            // Override with Template Timezone
+            if ( $template_id ) {
+                $tpl_tz = $wpdb->get_var( $wpdb->prepare( "SELECT timezone FROM {$wpdb->prefix}postal_templates WHERE id = %d", $template_id ) );
                 if ( ! empty( $tpl_tz ) ) {
                     $timezone = $tpl_tz;
                 }
             }
 
+            // Check if current hour in TARGET timezone is allowed
             if ( ! empty( $slots ) ) {
                 try {
-                    $tz_string = !empty($timezone) ? $timezone : 'UTC';
-                    $now_obj = new \DateTime( 'now', new \DateTimeZone( $tz_string ) );
-                    $current_hour = (int) $now_obj->format( 'G' );
+                    $dt = new \DateTime( 'now', new \DateTimeZone( $timezone ) );
+                    $current_hour = (int) $dt->format( 'G' );
 
                     if ( ! in_array( $current_hour, $slots, true ) ) {
-                        // Out of slot: Postpone 1 hour
-                        Logger::info( "Queue: Item #{$item['id']} reporté (Hors créneau)", [
-                            'tz' => $tz_string,
-                            'hour' => $current_hour,
-                            'slots' => implode(',', $slots)
-                        ] );
-
-                        $this->postpone( $item['id'], '+1 hour' );
+                        // Not in allowed slots
+                        self::postpone( $id, '+1 hour' );
                         continue;
                     }
                 } catch ( \Exception $e ) {
-                    Logger::error( "Queue: Erreur Timezone Item #{$item['id']}", [ 'msg' => $e->getMessage() ] );
+                    Logger::error( "Queue: Timezone Error for item $id", [ 'error' => $e->getMessage() ] );
                 }
             }
 
-            // 5. Smart Server Re-assignment & Quota Check
-            // Context: sending mode, specific ISP
-            $best_server = LoadBalancer::select_server( $item['template_id'] ?: 'default', [
-                'ignore_limits' => false,
-                'isp' => $item['isp']
-            ]);
+            // 5. Select Server
+            $server = LoadBalancer::select_server( $template_id ?: 'default', [ 'ignore_limits' => false ] );
 
-            if ( ! $best_server ) {
-                Logger::warning( "Queue: Item #{$item['id']} reporté (Aucun serveur disponible pour ISP {$item['isp']})" );
-                $this->postpone( $item['id'], '+1 hour' );
+            if ( ! $server ) {
+                Logger::warning( "Queue: No available server for item $id" );
+                self::postpone( $id, '+30 minutes' ); // Try again later
                 continue;
             }
 
-            $server_id = $best_server['id'];
-
-            // 5. Send
-            // Decode meta for template name, prefix, etc.
+            // 6. Send
             $meta = json_decode( $item['meta'], true );
             $prefix = $meta['prefix'] ?? 'contact';
+            $domain = $server['domain'];
 
-            // Always use the selected server's domain to prevent SPF failures
-            $domain = $best_server['domain'];
+            $wpdb->update( $table, [
+                'status' => 'processing',
+                'server_id' => $server['id'] // Update server ID to the one actually used
+            ], [ 'id' => $id ] );
 
-            $wpdb->update( $table, [ 'status' => 'processing' ], [ 'id' => $item['id'] ] );
-
-            // Sender::send uses Database::get_server internally if object passed, or we can pass array
-            $result = Sender::send( $item['to_email'], $domain, $prefix, $best_server );
+            // Use Sender
+            $result = Sender::send( $item['to_email'], $domain, $prefix, $server );
 
             if ( isset( $result['success'] ) && $result['success'] ) {
-                $wpdb->update(
-                    $table,
-                    [ 'status' => 'sent', 'updated_at' => current_time( 'mysql' ) ],
-                    [ 'id' => $item['id'] ]
-                );
+                $wpdb->update( $table, [
+                    'status' => 'sent',
+                    'updated_at' => current_time( 'mysql' ),
+                    'attempts' => $item['attempts'] + 1
+                ], [ 'id' => $id ] );
             } else {
-                $wpdb->update(
-                    $table,
-                    [
-                        'status' => 'failed',
-                        'attempts' => $item['attempts'] + 1,
-                        'error_message' => $result['error'] ?? 'Unknown error',
-                        'updated_at' => current_time( 'mysql' )
-                    ],
-                    [ 'id' => $item['id'] ]
-                );
+                $wpdb->update( $table, [
+                    'status' => 'failed',
+                    'error_message' => $result['error'] ?? 'Unknown error',
+                    'updated_at' => current_time( 'mysql' ),
+                    'attempts' => $item['attempts'] + 1
+                ], [ 'id' => $id ] );
+
+                // Retry logic is handled by Sender (ActionScheduler) usually,
+                // but here we are in the queue processor.
+                // If Sender::send was synchronous fallback or async queued successfully?
+                // Sender::send returns 'queued' => true if async.
+                // If 'queued', we might want to mark as 'processing' and let async job handle it?
+                // But Sender::send logic is a bit mixed.
+                // Assuming result['success'] means "Handed off successfully" or "Sent successfully".
             }
         }
     }
 
-    private static function check_server_capacity( $server_id ) {
-        // Retrieve Server Settings
-        $server = Database::get_server( $server_id );
-        if ( ! $server ) return false;
+    private static function check_isp_time_window( $isp_data ) {
+        $start = (int) $isp_data['hour_start'];
+        $end = (int) $isp_data['hour_end'];
+        $tz = $isp_data['timezone'] ?: 'UTC';
 
-        // Use unified logic in Stats model
-        $limit = \PostalWarmup\Models\Stats::get_dynamic_limit( $server );
+        if ( $start == $end ) return true; // 24h
 
-        if ( $limit <= 0 ) return true; // Unlimited
+        try {
+            $dt = new \DateTime( 'now', new \DateTimeZone( $tz ) );
+            $h = (int) $dt->format( 'G' );
 
-        $used = \PostalWarmup\Models\Stats::get_server_daily_usage( $server_id );
+            if ( $start < $end ) {
+                return $h >= $start && $h < $end;
+            } else {
+                // Crossing midnight (e.g. 22 to 06)
+                return $h >= $start || $h < $end;
+            }
+        } catch ( \Exception $e ) {
+            return true; // Fail open
+        }
+    }
 
-        return $used < $limit;
+    private static function postpone( $id, $delay = '+1 hour' ) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'postal_queue';
+        $wpdb->update(
+            $table,
+            [ 'scheduled_at' => date( 'Y-m-d H:i:s', strtotime( $delay, current_time( 'timestamp' ) ) ) ],
+            [ 'id' => $id ]
+        );
     }
 
     /**
-     * Nettoyage automatique des vieux éléments de la file d'attente
-     * Appelé par CRON (pw_cleanup_queue)
+     * Nettoyage automatique
      */
     public static function cleanup() {
         global $wpdb;
         $table_queue = $wpdb->prefix . 'postal_queue';
         $table_logs = $wpdb->prefix . 'postal_logs';
 
-        // Rétention Queue : défaut 30 jours (ou option)
         $days_queue = (int) get_option('pw_queue_retention_days', 30);
         $date_queue = date('Y-m-d H:i:s', strtotime("-$days_queue days"));
 
-        // Rétention Logs : défaut 60 jours (ou option)
         $days_logs = (int) get_option('pw_log_retention_days', 60);
         $date_logs = date('Y-m-d H:i:s', strtotime("-$days_logs days"));
 
-        // Supprimer les éléments terminés de la queue
-        $wpdb->query($wpdb->prepare(
-            "DELETE FROM $table_queue WHERE status IN ('sent', 'failed') AND updated_at < %s",
-            $date_queue
-        ));
+        $wpdb->query($wpdb->prepare("DELETE FROM $table_queue WHERE status IN ('sent', 'failed') AND updated_at < %s", $date_queue));
+        $wpdb->query($wpdb->prepare("DELETE FROM $table_logs WHERE created_at < %s", $date_logs));
 
-        // Supprimer les logs
-        $wpdb->query($wpdb->prepare(
-            "DELETE FROM $table_logs WHERE created_at < %s",
-            $date_logs
-        ));
-
-        Logger::info("Maintenance: Nettoyage effectué (Queue < $date_queue, Logs < $date_logs).");
+        Logger::info("Maintenance: Cleanup done.");
     }
 
     public static function get_health_stats() {
@@ -261,48 +253,24 @@ class QueueManager {
             'processing' => 0,
             'sent_24h' => 0,
             'failed_24h' => 0,
-            'top_isp' => 'N/A',
-            'top_server' => 'N/A'
+            'top_isp' => 'N/A'
         ];
 
-        // Counts
         $counts = $wpdb->get_results("SELECT status, COUNT(*) as count FROM $table GROUP BY status", ARRAY_A);
         foreach ($counts as $row) {
-            if ($row['status'] === 'pending') $stats['pending'] = $row['count'];
-            if ($row['status'] === 'processing') $stats['processing'] = $row['count'];
+            if (isset($stats[$row['status']])) $stats[$row['status']] = $row['count'];
         }
 
-        // 24h Activity
         $yesterday = date('Y-m-d H:i:s', strtotime('-24 hours'));
-        $activity = $wpdb->get_results($wpdb->prepare(
-            "SELECT status, COUNT(*) as count FROM $table WHERE updated_at >= %s GROUP BY status",
-            $yesterday
-        ), ARRAY_A);
-        foreach ($activity as $row) {
-            if ($row['status'] === 'sent') $stats['sent_24h'] = $row['count'];
-            if ($row['status'] === 'failed') $stats['failed_24h'] = $row['count'];
-        }
+        $sent_24 = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $table WHERE status = 'sent' AND updated_at >= %s", $yesterday));
+        $failed_24 = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $table WHERE status = 'failed' AND updated_at >= %s", $yesterday));
 
-        // Top ISP (Last 24h)
-        $top_isp = $wpdb->get_var($wpdb->prepare(
-            "SELECT isp FROM $table WHERE updated_at >= %s AND isp != 'Other' GROUP BY isp ORDER BY COUNT(*) DESC LIMIT 1",
-            $yesterday
-        ));
-        if ($top_isp) $stats['top_isp'] = $top_isp;
+        $stats['sent_24h'] = $sent_24;
+        $stats['failed_24h'] = $failed_24;
+
+        $top = $wpdb->get_var("SELECT isp FROM $table WHERE updated_at >= '$yesterday' GROUP BY isp ORDER BY COUNT(*) DESC LIMIT 1");
+        if ($top) $stats['top_isp'] = $top;
 
         return $stats;
-    }
-
-    /**
-     * Helper to postpone item
-     */
-    private function postpone( $id, $delay = '+1 hour' ) {
-        global $wpdb;
-        $table = $wpdb->prefix . 'postal_queue';
-        $wpdb->update(
-            $table,
-            [ 'scheduled_at' => date( 'Y-m-d H:i:s', strtotime( $delay, current_time( 'timestamp' ) ) ) ],
-            [ 'id' => $id ]
-        );
     }
 }
