@@ -48,8 +48,8 @@ class QueueManager {
         $table = $wpdb->prefix . 'postal_queue';
 
         $settings = get_option('pw_warmup_settings', []);
-        $global_tz = $settings['timezone'] ?? 'UTC';
-        $slots = $settings['schedule'] ?? [];
+        $global_tz = !empty($settings['timezone']) ? $settings['timezone'] : 'UTC';
+        $slots = !empty($settings['schedule']) ? array_map('intval', $settings['schedule']) : [];
 
         // 2. Fetch Pending Items (Safe Time)
         $now_mysql = current_time( 'mysql' );
@@ -77,10 +77,18 @@ class QueueManager {
 
             if ( ! empty( $slots ) ) {
                 try {
-                    $now_obj = new \DateTime( 'now', new \DateTimeZone( $timezone ) );
+                    $tz_string = !empty($timezone) ? $timezone : 'UTC';
+                    $now_obj = new \DateTime( 'now', new \DateTimeZone( $tz_string ) );
                     $current_hour = (int) $now_obj->format( 'G' );
-                    if ( ! in_array( $current_hour, $slots ) ) {
+
+                    if ( ! in_array( $current_hour, $slots, true ) ) {
                         // Out of slot: Postpone 1 hour
+                        Logger::info( "Queue: Item #{$item['id']} reporté (Hors créneau)", [
+                            'tz' => $tz_string,
+                            'hour' => $current_hour,
+                            'slots' => implode(',', $slots)
+                        ] );
+
                         $wpdb->update(
                             $table,
                             [ 'scheduled_at' => date( 'Y-m-d H:i:s', strtotime( '+1 hour', current_time( 'timestamp' ) ) ) ],
@@ -101,9 +109,11 @@ class QueueManager {
             if ( ! $best_server ) {
                 // No server available at all (all limits reached or timezones mismatch)
                 // Postpone 1 hour
+                Logger::warning( "Queue: Item #{$item['id']} reporté (Aucun serveur disponible)" );
+
                 $wpdb->update(
                     $table,
-                    [ 'scheduled_at' => date( 'Y-m-d H:i:s', strtotime( '+1 hour' ) ) ],
+                    [ 'scheduled_at' => date( 'Y-m-d H:i:s', strtotime( '+1 hour', current_time( 'timestamp' ) ) ) ],
                     [ 'id' => $item['id'] ]
                 );
                 continue;
