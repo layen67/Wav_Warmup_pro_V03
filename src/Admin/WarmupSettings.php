@@ -4,14 +4,9 @@ namespace PostalWarmup\Admin;
 
 class WarmupSettings {
 
-    public function init() {
-        add_action( 'admin_init', [ $this, 'register_settings' ] );
-    }
-
     public function register_settings() {
-        register_setting( 'postal-warmup-settings', 'pw_warmup_settings', [ 'sanitize_callback' => [ $this, 'sanitize_settings' ] ] );
-
-        add_settings_section( 'pw_warmup_strategy', __( 'Stratégie de Warmup', 'postal-warmup' ), null, 'postal-warmup-settings' );
+        // === Global Warmup Strategy ===
+        add_settings_section( 'pw_warmup_strategy', __( 'Stratégie de Warmup Globale', 'postal-warmup' ), null, 'postal-warmup-settings' );
 
         add_settings_field( 'pw_warmup_start', __( 'Volume de départ', 'postal-warmup' ), [ $this, 'render_start_field' ], 'postal-warmup-settings', 'pw_warmup_strategy' );
         add_settings_field( 'pw_warmup_growth', __( 'Croissance journalière (%)', 'postal-warmup' ), [ $this, 'render_growth_field' ], 'postal-warmup-settings', 'pw_warmup_strategy' );
@@ -19,9 +14,8 @@ class WarmupSettings {
         add_settings_field( 'pw_warmup_schedule', __( 'Créneaux horaires autorisés', 'postal-warmup' ), [ $this, 'render_schedule_field' ], 'postal-warmup-settings', 'pw_warmup_strategy' );
         add_settings_field( 'pw_global_timezone', __( 'Fuseau horaire global', 'postal-warmup' ), [ $this, 'render_timezone_field' ], 'postal-warmup-settings', 'pw_warmup_strategy' );
 
-        // Nouvelle section : ISP Limits
-        add_settings_section( 'pw_isp_limits', __( 'Limites par ISP', 'postal-warmup' ), null, 'postal-warmup-settings' );
-        add_settings_field( 'pw_isp_daily_limits', __( 'Limites journalières (JSON)', 'postal-warmup' ), [ $this, 'render_isp_limits_field' ], 'postal-warmup-settings', 'pw_isp_limits' );
+        // Register options
+        register_setting( 'postal-warmup-settings', 'pw_warmup_settings', [ 'sanitize_callback' => [ $this, 'sanitize_settings' ] ] );
     }
 
     public function sanitize_settings( $input ) {
@@ -37,15 +31,8 @@ class WarmupSettings {
             $output['schedule'] = range( 9, 18 ); // Default 9h-18h
         }
 
-        // Sanitize ISP Limits (JSON)
-        if ( isset( $input['isp_limits'] ) ) {
-            $json = json_decode( stripslashes( $input['isp_limits'] ), true );
-            if ( json_last_error() === JSON_ERROR_NONE && is_array( $json ) ) {
-                 $output['isp_limits'] = $json;
-            } else {
-                 $output['isp_limits'] = []; // Invalid JSON reset
-            }
-        }
+        // Remove legacy ISP JSON logic if present, handled by ISPManager now
+        // But keep fallback if user provided
 
         return $output;
     }
@@ -54,25 +41,21 @@ class WarmupSettings {
         $settings = get_option( 'pw_warmup_settings', [] );
         $val = $settings['start_volume'] ?? 10;
         echo '<input type="number" name="pw_warmup_settings[start_volume]" value="' . esc_attr( $val ) . '" class="small-text"> emails/jour/serveur';
+        echo '<p class="description">Valeur par défaut si non spécifiée dans le serveur ou l\'ISP.</p>';
     }
 
     public function render_growth_field() {
         $settings = get_option( 'pw_warmup_settings', [] );
         $val = $settings['growth_rate'] ?? 20;
         echo '<input type="number" name="pw_warmup_settings[growth_rate]" value="' . esc_attr( $val ) . '" class="small-text"> %';
+        echo '<p class="description">Augmentation quotidienne du volume (ex: 20%).</p>';
     }
 
     public function render_max_hour_field() {
         $settings = get_option( 'pw_warmup_settings', [] );
         $val = $settings['max_per_hour'] ?? 0;
         echo '<input type="number" name="pw_warmup_settings[max_per_hour]" value="' . esc_attr( $val ) . '" class="small-text"> emails/heure (0 = illimité)';
-    }
-
-    public function render_isp_limits_field() {
-        $settings = get_option( 'pw_warmup_settings', [] );
-        $val = isset($settings['isp_limits']) ? json_encode($settings['isp_limits'], JSON_PRETTY_PRINT) : "{\n  \"Google\": 500,\n  \"Yahoo\": 200,\n  \"Microsoft\": 300\n}";
-        echo '<textarea name="pw_warmup_settings[isp_limits]" rows="5" class="large-text code">' . esc_textarea( $val ) . '</textarea>';
-        echo '<p class="description">Format JSON : "ISP Name": Daily Limit. 0 = Illimité.</p>';
+        echo '<p class="description">Limite globale de sécurité par heure.</p>';
     }
 
     public function render_timezone_field() {
@@ -83,6 +66,7 @@ class WarmupSettings {
             echo '<option value="' . esc_attr( $tz ) . '" ' . selected( $val, $tz, false ) . '>' . esc_html( $tz ) . '</option>';
         }
         echo '</select>';
+        echo '<p class="description">Fuseau horaire par défaut pour les calculs de plage horaire.</p>';
     }
 
     public function render_schedule_field() {

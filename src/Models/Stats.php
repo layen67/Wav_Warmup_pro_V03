@@ -35,6 +35,18 @@ class Stats {
 		) );
 	}
 
+    public static function get_isp_hourly_usage( string $isp ) {
+        global $wpdb;
+        $queue_table = $wpdb->prefix . 'postal_queue';
+        $hour_start = current_time( 'Y-m-d H:00:00' );
+
+        return (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM $queue_table WHERE isp = %s AND status IN ('sent', 'processing') AND updated_at >= %s",
+            $isp,
+            $hour_start
+        ) );
+    }
+
 	public static function get_dynamic_limit( $server ) {
 		$limit = (int) $server['daily_limit'];
 
