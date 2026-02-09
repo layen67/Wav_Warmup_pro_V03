@@ -81,6 +81,6 @@ class WarmupSettings {
                   </label>";
         }
         echo '</div>';
-        echo '<p class="description">Heures durant lesquelles les envois sont autorisés (selon le fuseau horaire global).</p>';
+        echo '<p class="description">Heures durant lesquelles les envois sont autorisés (selon le fuseau horaire du template si défini, sinon global).</p>';
     }
 }
