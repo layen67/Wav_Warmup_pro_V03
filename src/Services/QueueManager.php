@@ -57,7 +57,7 @@ class QueueManager {
 
         // 1. Load Settings
         $settings = get_option('pw_warmup_settings', []);
-        $global_tz = !empty($settings['timezone']) ? $settings['timezone'] : 'UTC';
+        $global_tz = wp_timezone_string(); // Use WP default timezone if not set in template
         $slots = !empty($settings['schedule']) ? array_map('intval', $settings['schedule']) : []; // e.g. [8,9,10,...]
 
         // 2. Fetch Pending Items

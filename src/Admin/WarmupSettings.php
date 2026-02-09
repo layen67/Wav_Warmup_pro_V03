@@ -12,7 +12,6 @@ class WarmupSettings {
         add_settings_field( 'pw_warmup_growth', __( 'Croissance journalière (%)', 'postal-warmup' ), [ $this, 'render_growth_field' ], 'postal-warmup-settings', 'pw_warmup_strategy' );
         add_settings_field( 'pw_warmup_max_hour', __( 'Max par heure', 'postal-warmup' ), [ $this, 'render_max_hour_field' ], 'postal-warmup-settings', 'pw_warmup_strategy' );
         add_settings_field( 'pw_warmup_schedule', __( 'Créneaux horaires autorisés', 'postal-warmup' ), [ $this, 'render_schedule_field' ], 'postal-warmup-settings', 'pw_warmup_strategy' );
-        add_settings_field( 'pw_global_timezone', __( 'Fuseau horaire global', 'postal-warmup' ), [ $this, 'render_timezone_field' ], 'postal-warmup-settings', 'pw_warmup_strategy' );
 
         // Register options
         register_setting( 'postal-warmup-settings', 'pw_warmup_settings', [ 'sanitize_callback' => [ $this, 'sanitize_settings' ] ] );
@@ -23,7 +22,6 @@ class WarmupSettings {
         $output['start_volume'] = absint( $input['start_volume'] ?? 10 );
         $output['growth_rate'] = absint( $input['growth_rate'] ?? 20 );
         $output['max_per_hour'] = absint( $input['max_per_hour'] ?? 0 );
-        $output['timezone'] = sanitize_text_field( $input['timezone'] ?? 'UTC' );
 
         if ( isset( $input['schedule'] ) && is_array( $input['schedule'] ) ) {
             $output['schedule'] = array_map( 'absint', $input['schedule'] );
@@ -56,17 +54,6 @@ class WarmupSettings {
         $val = $settings['max_per_hour'] ?? 0;
         echo '<input type="number" name="pw_warmup_settings[max_per_hour]" value="' . esc_attr( $val ) . '" class="small-text"> emails/heure (0 = illimité)';
         echo '<p class="description">Limite globale de sécurité par heure.</p>';
-    }
-
-    public function render_timezone_field() {
-        $settings = get_option( 'pw_warmup_settings', [] );
-        $val = $settings['timezone'] ?? 'UTC';
-        echo '<select name="pw_warmup_settings[timezone]">';
-        foreach ( timezone_identifiers_list() as $tz ) {
-            echo '<option value="' . esc_attr( $tz ) . '" ' . selected( $val, $tz, false ) . '>' . esc_html( $tz ) . '</option>';
-        }
-        echo '</select>';
-        echo '<p class="description">Fuseau horaire par défaut pour les calculs de plage horaire.</p>';
     }
 
     public function render_schedule_field() {
