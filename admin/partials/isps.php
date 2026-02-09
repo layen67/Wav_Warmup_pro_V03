@@ -6,6 +6,7 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 use PostalWarmup\Admin\ISPManager;
+use PostalWarmup\Models\Strategy;
 
 ?>
 <div class="wrap">
@@ -39,7 +40,13 @@ use PostalWarmup\Admin\ISPManager;
                     <td><?php echo esc_html($domains_list); ?></td>
                     <td><?php echo $isp['max_daily'] > 0 ? $isp['max_daily'] : '∞'; ?></td>
                     <td><?php echo $isp['max_hourly'] > 0 ? $isp['max_hourly'] : '∞'; ?></td>
-                    <td><?php echo esc_html($isp['strategy']); ?></td>
+                    <td>
+                        <?php if(!empty($isp['strategy_name'])): ?>
+                            <span class="pw-badge" style="background:#2271b1;"><?php echo esc_html($isp['strategy_name']); ?></span>
+                        <?php else: ?>
+                            <?php echo esc_html($isp['strategy']); ?>
+                        <?php endif; ?>
+                    </td>
                     <td><?php echo $isp['active'] ? '<span class="pw-badge success">Actif</span>' : '<span class="pw-badge error">Inactif</span>'; ?></td>
                     <td>
                         <button class="button pw-edit-isp">Éditer</button>
@@ -87,7 +94,15 @@ use PostalWarmup\Admin\ISPManager;
 
                 <div class="pw-form-group">
                     <label>Stratégie de Warmup</label>
-                    <select name="strategy" id="pw-isp-strategy" class="widefat">
+                    <select name="strategy_id" id="pw-isp-strategy-id" class="widefat" style="margin-bottom:5px;">
+                        <option value="">-- Aucune (Utiliser Global) --</option>
+                        <?php foreach ( Strategy::get_all() as $s ): ?>
+                            <option value="<?php echo $s['id']; ?>"><?php echo esc_html($s['name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <small>Ou preset legacy :</small>
+                    <select name="strategy" id="pw-isp-strategy" class="widefat" style="margin-top:5px;">
                         <option value="slow_rise">Douce (Slow Rise)</option>
                         <option value="aggressive">Agressive</option>
                         <option value="staged">Par Paliers (Staged)</option>
@@ -131,9 +146,7 @@ jQuery(document).ready(function($) {
         $('#pw-isp-domains').val(data.domains ? data.domains.join(', ') : '');
         $('#pw-isp-daily').val(data.max_daily);
         $('#pw-isp-hourly').val(data.max_hourly);
-        $('#pw-isp-start').val(data.hour_start);
-        $('#pw-isp-end').val(data.hour_end);
-        $('#pw-isp-timezone').val(data.timezone);
+        $('#pw-isp-strategy-id').val(data.strategy_id);
         $('#pw-isp-strategy').val(data.strategy);
         $('#pw-isp-active').prop('checked', data.active == 1);
 

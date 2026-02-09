@@ -8,6 +8,8 @@ use PostalWarmup\API\Sender;
 use PostalWarmup\Services\LoadBalancer;
 use PostalWarmup\Services\ISPDetector;
 use PostalWarmup\Models\Stats;
+use PostalWarmup\Models\Strategy;
+use PostalWarmup\Services\StrategyEngine;
 
 class QueueManager {
 
@@ -84,11 +86,40 @@ class QueueManager {
                 }
             }
 
-            // 3. ISP Limits Check
+            // 3. ISP & Strategy Limits Check
             if ( $isp !== 'Other' ) {
                 $isp_data = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}postal_isps WHERE isp_key = %s", $isp ), ARRAY_A );
 
                 if ( $isp_data ) {
+                    // Strategy Enforcement
+                    if ( ! empty( $isp_data['strategy_id'] ) ) {
+                        $strategy = Strategy::get( $isp_data['strategy_id'] );
+                        if ( $strategy ) {
+                            $warmup_day = isset($item['warmup_day']) ? (int)$item['warmup_day'] : 1;
+
+                            // Calculate Dynamic Limit
+                            $dynamic_limit = StrategyEngine::calculate_daily_limit( $strategy, $warmup_day );
+
+                            // Check Safety
+                            $safety = StrategyEngine::check_safety_rules( $strategy, [
+                                'sent_today' => Stats::get_isp_daily_usage( $isp ),
+                                'bounces_today' => 0, // Need to implement get_bounces_today
+                                'complaints_today' => 0
+                            ]);
+
+                            if ( ! $safety['allowed'] ) {
+                                Logger::warning( "Queue: Strategy Block ({$safety['reason']})", [ 'item_id' => $id ] );
+                                self::postpone( $id, '+4 hours' ); // Safety pause
+                                continue;
+                            }
+
+                            // Use Dynamic Limit if stricter than Static
+                            if ( $dynamic_limit < ($isp_data['max_daily'] > 0 ? $isp_data['max_daily'] : 999999) ) {
+                                $isp_data['max_daily'] = $dynamic_limit;
+                            }
+                        }
+                    }
+
                     // Daily Limit
                     $limit_daily = (int) $isp_data['max_daily'];
                     if ( $limit_daily > 0 ) {

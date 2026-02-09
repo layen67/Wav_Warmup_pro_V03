@@ -15,7 +15,14 @@ class ISPManager {
     public static function get_all() {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_isps';
-        $results = $wpdb->get_results( "SELECT * FROM $table ORDER BY isp_label ASC", ARRAY_A );
+        $table_str = $wpdb->prefix . 'postal_strategies';
+
+        $results = $wpdb->get_results( "
+            SELECT i.*, s.name as strategy_name
+            FROM $table i
+            LEFT JOIN $table_str s ON i.strategy_id = s.id
+            ORDER BY i.isp_label ASC
+        ", ARRAY_A );
 
         // Decode domains
         foreach ( $results as &$row ) {
@@ -52,6 +59,7 @@ class ISPManager {
             'max_daily'  => absint( $data['max_daily'] ),
             'max_hourly' => absint( $data['max_hourly'] ),
             'strategy'   => sanitize_text_field( $data['strategy'] ?? 'slow_rise' ),
+            'strategy_id'=> !empty($data['strategy_id']) ? absint($data['strategy_id']) : null,
             'active'     => isset( $data['active'] ) ? 1 : 0
         ];
 

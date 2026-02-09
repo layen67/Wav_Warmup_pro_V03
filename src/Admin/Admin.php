@@ -38,6 +38,7 @@ class Admin {
 		add_submenu_page( 'postal-warmup', __( 'Logs', 'postal-warmup' ), __( 'Logs', 'postal-warmup' ), 'manage_options', 'postal-warmup-logs', [ $this, 'display_logs' ] );
 		add_submenu_page( 'postal-warmup', __( 'Paramètres', 'postal-warmup' ), __( 'Paramètres', 'postal-warmup' ), 'manage_options', 'postal-warmup-settings', [ $this, 'display_settings' ] );
 		add_submenu_page( 'postal-warmup', __( 'Gestion ISP', 'postal-warmup' ), __( 'Gestion ISP', 'postal-warmup' ), 'manage_options', 'postal-warmup-isps', [ $this, 'display_isps' ] );
+		add_submenu_page( 'postal-warmup', __( 'Stratégies', 'postal-warmup' ), __( 'Stratégies', 'postal-warmup' ), 'manage_options', 'postal-warmup-strategies', [ $this, 'display_strategies' ] );
 	}
 
 	public function enqueue_styles( $hook ) {
@@ -76,6 +77,10 @@ class Admin {
 			wp_enqueue_script( 'pw-templates', PW_PLUGIN_URL . 'admin/assets/js/templates-manager.js', [ 'jquery', 'pw-admin' ], $script_version, true );
 		}
 
+		if ( strpos( $hook, 'postal-warmup-strategies' ) !== false ) {
+			wp_enqueue_script( 'pw-strategies', PW_PLUGIN_URL . 'admin/assets/js/strategies.js', [ 'jquery', 'pw-chartjs', 'pw-admin' ], $script_version, true );
+		}
+
 		$uncategorized_id = TemplateManager::ensure_uncategorized_folder();
 
 		wp_localize_script( 'pw-admin', 'pwAdmin', [
@@ -100,6 +105,7 @@ class Admin {
 	public function display_logs() { require_once PW_ADMIN_DIR . 'partials/logs.php'; }
 	public function display_settings() { require_once PW_ADMIN_DIR . 'partials/settings.php'; }
 	public function display_isps() { require_once PW_ADMIN_DIR . 'partials/isps.php'; }
+	public function display_strategies() { require_once PW_ADMIN_DIR . 'partials/strategies.php'; }
 
 	public function display_admin_notices() {
 		if ( get_transient( 'pw_activation_notice' ) ) {

@@ -266,6 +266,8 @@ class Activator {
 			id bigint NOT NULL AUTO_INCREMENT,
 			server_id int NOT NULL,
 			template_id bigint DEFAULT NULL,
+			strategy_id bigint DEFAULT NULL,
+			warmup_day int DEFAULT 1,
 			to_email varchar(255) NOT NULL,
 			from_email varchar(255) NOT NULL,
 			subject text NOT NULL,
@@ -281,7 +283,8 @@ class Activator {
 			KEY idx_status (status),
 			KEY idx_scheduled (scheduled_at),
 			KEY idx_server (server_id),
-			KEY idx_isp (isp)
+			KEY idx_isp (isp),
+			KEY idx_strategy (strategy_id)
 		) $charset_collate;";
 		dbDelta( $sql_queue );
 
@@ -295,10 +298,12 @@ class Activator {
 			max_daily int DEFAULT 0,
 			max_hourly int DEFAULT 0,
 			strategy varchar(50) DEFAULT 'slow_rise',
+			strategy_id bigint DEFAULT NULL,
 			active tinyint(1) DEFAULT 1,
 			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
-			UNIQUE KEY isp_key (isp_key)
+			UNIQUE KEY isp_key (isp_key),
+			KEY idx_strategy (strategy_id)
 		) $charset_collate;";
 		dbDelta( $sql_isps );
 
@@ -319,6 +324,20 @@ class Activator {
 			KEY idx_isp (isp_key)
 		) $charset_collate;";
 		dbDelta( $sql_server_isp );
+
+		// 16. Strategies
+		$table_strategies = $wpdb->prefix . 'postal_strategies';
+		$sql_strategies = "CREATE TABLE $table_strategies (
+			id bigint NOT NULL AUTO_INCREMENT,
+			name varchar(100) NOT NULL,
+			description text DEFAULT NULL,
+			config_json longtext NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			UNIQUE KEY name (name)
+		) $charset_collate;";
+		dbDelta( $sql_strategies );
 	}
 
 	private static function set_default_options() {

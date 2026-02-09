@@ -16,14 +16,16 @@ $offset = ($page - 1) * $per_page;
 global $wpdb;
 $table = $wpdb->prefix . 'postal_queue';
 $table_tpl = $wpdb->prefix . 'postal_templates';
+$table_str = $wpdb->prefix . 'postal_strategies';
 
 $total = $wpdb->get_var("SELECT COUNT(*) FROM $table");
 
-// Fetch with Template Name
+// Fetch with Template Name and Strategy Name
 $items = $wpdb->get_results($wpdb->prepare(
-    "SELECT q.*, t.name as template_name
+    "SELECT q.*, t.name as template_name, s.name as strategy_name
      FROM $table q
      LEFT JOIN $table_tpl t ON q.template_id = t.id
+     LEFT JOIN $table_str s ON q.strategy_id = s.id
      ORDER BY q.scheduled_at DESC
      LIMIT %d OFFSET %d",
     $per_page, $offset
@@ -94,6 +96,7 @@ $total_pages = ceil($total / $per_page);
             <tr>
                 <th width="60">ID</th>
                 <th>Template</th>
+                <th>Stratégie</th>
                 <th>Serveur Assigné</th>
                 <th>Destinataire / ISP</th>
                 <th>Sujet</th>
@@ -157,6 +160,14 @@ $total_pages = ceil($total / $per_page);
                 <tr>
                     <td>#<?php echo $item['id']; ?></td>
                     <td><strong><?php echo $template_name; ?></strong></td>
+                    <td>
+                        <?php if(!empty($item['strategy_name'])): ?>
+                            <span class="pw-badge" style="background:#2271b1;"><?php echo esc_html($item['strategy_name']); ?></span>
+                            <br><small>Jour <?php echo $item['warmup_day']; ?></small>
+                        <?php else: ?>
+                            <span style="color:#ccc;">-</span>
+                        <?php endif; ?>
+                    </td>
                     <td><?php echo $server_name; ?></td>
                     <td>
                         <?php echo esc_html($item['to_email']); ?><br>
