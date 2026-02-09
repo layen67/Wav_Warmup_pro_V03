@@ -52,9 +52,6 @@ class ISPManager {
             'max_daily'  => absint( $data['max_daily'] ),
             'max_hourly' => absint( $data['max_hourly'] ),
             'strategy'   => sanitize_text_field( $data['strategy'] ?? 'slow_rise' ),
-            'hour_start' => absint( $data['hour_start'] ?? 8 ),
-            'hour_end'   => absint( $data['hour_end'] ?? 18 ),
-            'timezone'   => sanitize_text_field( $data['timezone'] ?? 'UTC' ),
             'active'     => isset( $data['active'] ) ? 1 : 0
         ];
 

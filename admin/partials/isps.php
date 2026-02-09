@@ -20,7 +20,6 @@ use PostalWarmup\Admin\ISPManager;
                 <th>Domaines Associés</th>
                 <th>Quota Jour</th>
                 <th>Quota Heure</th>
-                <th>Plage Horaire</th>
                 <th>Stratégie</th>
                 <th>Statut</th>
                 <th>Actions</th>
@@ -30,7 +29,7 @@ use PostalWarmup\Admin\ISPManager;
             <?php
             $isps = ISPManager::get_all();
             if ( empty( $isps ) ): ?>
-                <tr><td colspan="8">Aucun profil ISP configuré.</td></tr>
+                <tr><td colspan="7">Aucun profil ISP configuré.</td></tr>
             <?php else: foreach ( $isps as $isp ):
                 $domains_list = implode(', ', $isp['domains']);
                 if (strlen($domains_list) > 50) $domains_list = substr($domains_list, 0, 50) . '...';
@@ -40,7 +39,6 @@ use PostalWarmup\Admin\ISPManager;
                     <td><?php echo esc_html($domains_list); ?></td>
                     <td><?php echo $isp['max_daily'] > 0 ? $isp['max_daily'] : '∞'; ?></td>
                     <td><?php echo $isp['max_hourly'] > 0 ? $isp['max_hourly'] : '∞'; ?></td>
-                    <td><?php echo $isp['hour_start']; ?>h - <?php echo $isp['hour_end']; ?>h <br><small><?php echo esc_html($isp['timezone']); ?></small></td>
                     <td><?php echo esc_html($isp['strategy']); ?></td>
                     <td><?php echo $isp['active'] ? '<span class="pw-badge success">Actif</span>' : '<span class="pw-badge error">Inactif</span>'; ?></td>
                     <td>
@@ -86,27 +84,6 @@ use PostalWarmup\Admin\ISPManager;
                     </div>
                 </div>
 
-                <div style="display:flex; gap:15px; margin-bottom:15px;">
-                    <div style="flex:1;">
-                        <label>Heure Début</label>
-                        <select name="hour_start" id="pw-isp-start" class="widefat">
-                            <?php for($i=0; $i<24; $i++) echo "<option value='$i'>{$i}h</option>"; ?>
-                        </select>
-                    </div>
-                    <div style="flex:1;">
-                        <label>Heure Fin</label>
-                        <select name="hour_end" id="pw-isp-end" class="widefat">
-                            <?php for($i=0; $i<24; $i++) echo "<option value='$i' " . ($i==18?'selected':'') . ">{$i}h</option>"; ?>
-                        </select>
-                    </div>
-                    <div style="flex:1;">
-                        <label>Fuseau Horaire</label>
-                        <select name="timezone" id="pw-isp-timezone" class="widefat">
-                            <option value="UTC">UTC</option>
-                            <?php foreach(timezone_identifiers_list() as $tz) echo "<option value='$tz'>$tz</option>"; ?>
-                        </select>
-                    </div>
-                </div>
 
                 <div class="pw-form-group">
                     <label>Stratégie de Warmup</label>

@@ -89,12 +89,6 @@ class QueueManager {
                 $isp_data = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}postal_isps WHERE isp_key = %s", $isp ), ARRAY_A );
 
                 if ( $isp_data ) {
-                    // Time Window Check (ISP specific)
-                    if ( ! self::check_isp_time_window( $isp_data ) ) {
-                        self::postpone( $id, '+1 hour' );
-                        continue;
-                    }
-
                     // Daily Limit
                     $limit_daily = (int) $isp_data['max_daily'];
                     if ( $limit_daily > 0 ) {
@@ -189,28 +183,6 @@ class QueueManager {
                 // But Sender::send logic is a bit mixed.
                 // Assuming result['success'] means "Handed off successfully" or "Sent successfully".
             }
-        }
-    }
-
-    private static function check_isp_time_window( $isp_data ) {
-        $start = (int) $isp_data['hour_start'];
-        $end = (int) $isp_data['hour_end'];
-        $tz = $isp_data['timezone'] ?: 'UTC';
-
-        if ( $start == $end ) return true; // 24h
-
-        try {
-            $dt = new \DateTime( 'now', new \DateTimeZone( $tz ) );
-            $h = (int) $dt->format( 'G' );
-
-            if ( $start < $end ) {
-                return $h >= $start && $h < $end;
-            } else {
-                // Crossing midnight (e.g. 22 to 06)
-                return $h >= $start || $h < $end;
-            }
-        } catch ( \Exception $e ) {
-            return true; // Fail open
         }
     }
 
