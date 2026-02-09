@@ -120,18 +120,7 @@ class QueueManager {
                         }
                     }
 
-                    // Daily Limit
-                    $limit_daily = (int) $isp_data['max_daily'];
-                    if ( $limit_daily > 0 ) {
-                        $used_daily = Stats::get_isp_daily_usage( $isp );
-                        if ( $used_daily >= $limit_daily ) {
-                            Logger::info( "Queue: ISP $isp Daily Limit Reached ($used_daily/$limit_daily)", [ 'item_id' => $id ] );
-                            self::postpone( $id, '+1 hour' );
-                            continue;
-                        }
-                    }
-
-                    // Hourly Limit
+                    // Hourly Limit (Still Global for now, or per server? Usually per IP but we aggregate)
                     $limit_hourly = (int) $isp_data['max_hourly'];
                     if ( $limit_hourly > 0 ) {
                         $used_hourly = Stats::get_isp_hourly_usage( $isp );
@@ -170,11 +159,15 @@ class QueueManager {
                 }
             }
 
-            // 5. Select Server
-            $server = LoadBalancer::select_server( $template_id ?: 'default', [ 'ignore_limits' => false ] );
+            // 5. Select Server (Checks ISP limits per server)
+            $server = LoadBalancer::select_server( $template_id ?: 'default', [
+                'ignore_limits' => false,
+                'isp' => $isp,
+                'strategy_id' => $isp_data['strategy_id'] ?? null
+            ] );
 
             if ( ! $server ) {
-                Logger::warning( "Queue: No available server for item $id" );
+                Logger::warning( "Queue: No available server for item $id (ISP limits or Capacity reached)" );
                 self::postpone( $id, '+30 minutes' ); // Try again later
                 continue;
             }

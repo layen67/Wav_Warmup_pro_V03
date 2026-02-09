@@ -5,6 +5,8 @@ namespace PostalWarmup\Services;
 use PostalWarmup\Models\Database;
 use PostalWarmup\Models\Stats;
 use PostalWarmup\Services\Logger;
+use PostalWarmup\Models\Strategy;
+use PostalWarmup\Services\StrategyEngine;
 
 class LoadBalancer {
 
@@ -24,6 +26,8 @@ class LoadBalancer {
         }
 
         $ignore_limits = $context['ignore_limits'] ?? false;
+        $target_isp = $context['isp'] ?? null;
+        $strategy_id = $context['strategy_id'] ?? null;
 
         // 1. Récupérer les serveurs actifs
         $servers = Database::get_servers( true ); // active = 1
@@ -39,22 +43,46 @@ class LoadBalancer {
         foreach ( $servers as $server ) {
             $server_id = (int) $server['id'];
 
-            // Calculer les métriques
+            // 1. Global Server Limit
             $limit = Stats::get_dynamic_limit( $server );
             $usage = Stats::get_server_daily_usage( $server_id );
+
+            // 2. ISP Specific Limit (via Strategy)
+            $isp_limit_reached = false;
+            $isp_usage = 0;
+            $isp_limit = 0;
+
+            if ( $strategy_id && $target_isp ) {
+                $strategy = Strategy::get( $strategy_id );
+                if ( $strategy ) {
+                    $warmup_day = isset( $server['warmup_day'] ) ? (int)$server['warmup_day'] : 1;
+                    $isp_limit = StrategyEngine::calculate_daily_limit( $strategy, $warmup_day );
+                    $isp_usage = Stats::get_server_isp_daily_usage( $server_id, $target_isp );
+
+                    if ( $isp_limit > 0 && $isp_usage >= $isp_limit ) {
+                        $isp_limit_reached = true;
+                    }
+                }
+            }
+
+            // Metrics
             $remaining = $limit > 0 ? max( 0, $limit - $usage ) : 999999;
             $usage_percent = $limit > 0 ? ( $usage / $limit ) * 100 : 0;
 
             $server['metrics'] = [
                 'usage' => $usage,
                 'limit' => $limit,
+                'isp_usage' => $isp_usage,
+                'isp_limit' => $isp_limit,
                 'remaining' => $remaining,
                 'usage_percent' => $usage_percent,
                 'priority' => (int) ( $server['priority'] ?? 10 )
             ];
 
-            // Vérification capacité
-            if ( $limit > 0 && $usage >= $limit ) {
+            // Vérification capacité (Globale & ISP)
+            $is_full = ( $limit > 0 && $usage >= $limit ) || $isp_limit_reached;
+
+            if ( $is_full ) {
                 $full_servers[] = $server;
                 if ( ! $ignore_limits ) {
                     continue; // Skip if full and strict mode

@@ -61,6 +61,22 @@ class Stats {
         ) );
     }
 
+	public static function get_server_isp_daily_usage( int $server_id, string $isp ) {
+		global $wpdb;
+		$queue_table = $wpdb->prefix . 'postal_queue';
+		$date_start = current_time( 'Y-m-d 00:00:00' );
+
+		return (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM $queue_table
+             WHERE server_id = %d AND isp = %s
+             AND status IN ('sent', 'processing')
+             AND updated_at >= %s",
+			$server_id,
+			$isp,
+			$date_start
+		) );
+	}
+
 	public static function get_dynamic_limit( $server ) {
 		$limit = (int) $server['daily_limit'];
 
