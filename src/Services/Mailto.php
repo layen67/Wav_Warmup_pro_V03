@@ -177,9 +177,12 @@ class Mailto {
 		$track = $atts['track'] === 'true';
 
 		// Server Health Check for CSS
-		$metrics = $server['metrics'] ?? [];
-		$usage = $metrics['usage_today'] ?? 0;
-		$limit = $metrics['limit'] ?? 0;
+		// Note: LoadBalancer V3 uses 'lb_metrics', V2 used 'metrics'
+		$metrics = $server['lb_metrics'] ?? ( $server['metrics'] ?? [] );
+
+		// Map metrics
+		$usage = $metrics['usage_today'] ?? ( $metrics['isp_usage'] ?? 0 );
+		$limit = $metrics['limit'] ?? ( $metrics['isp_limit'] ?? 0 );
 		$is_full = ( $limit > 0 && $usage >= $limit );
 
 		$status_class = 'pw-server-ok';
