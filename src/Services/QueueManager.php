@@ -121,32 +121,13 @@ class QueueManager {
 
                 if ( $isp_data && ! empty( $isp_data['strategy_id'] ) ) {
                     $strategy_id = $isp_data['strategy_id'];
-                    $strategy = Strategy::get( $strategy_id );
-
-                    if ( $strategy ) {
-                        // Check Global Safety Rules (e.g. Bounce Rate across all servers for this ISP)
-                        // We use global stats for ISP to prevent sending if ISP blocks us everywhere
-                        $global_stats = [
-                            'sent_today' => Stats::get_isp_daily_usage( $isp ),
-                            // Fails today is approximation as we don't have global ISP fail count easily cached yet
-                            // But we can rely on LoadBalancer's per-server check for now.
-                            // If needed, we can implement Stats::get_isp_daily_fails($isp)
-                            'fails_today' => 0
-                        ];
-
-                        // Note: StrategyEngine::check_safety_rules requires stats array.
-                        // Since we lack a fast global fail counter, we skip GLOBAL safety block here
-                        // and rely on the Per-Server safety check inside LoadBalancer (if implemented)
-                        // or trust the individual server throttling.
-
-                        // However, to satisfy the requirement, let's enable it if stats are available.
-                        // For now, we keep it disabled to avoid false positives with 0 fails.
-                    }
+                    // Note: Global ISP safety check could be added here if we had global aggregated fail stats easily available.
+                    // For now, we rely on LoadBalancer's per-server safety check which is stricter and more accurate per IP reputation.
                 }
             }
 
             // 5. Select Server (LoadBalancer V3)
-            // This handles Per-Server ISP Quotas
+            // This handles Per-Server ISP Quotas & Per-Server Safety
             $server = LoadBalancer::select_server( $template_id ?: 'default', [
                 'ignore_limits' => false,
                 'isp' => $isp,
@@ -154,7 +135,7 @@ class QueueManager {
             ] );
 
             if ( ! $server ) {
-                Logger::warning( "Queue: No available server for item $id (ISP limits or Capacity reached)" );
+                Logger::warning( "Queue: No available server for item $id (Limits or Safety)", [ 'isp' => $isp, 'strategy' => $strategy_id ] );
                 self::postpone( $id, '+30 minutes' ); // Try again later
                 continue;
             }
@@ -171,6 +152,8 @@ class QueueManager {
                 'server_id' => $server['id'], // Update server ID to the one actually used
                 'from_email' => $sender_email // Update sender to match server
             ], [ 'id' => $id ] );
+
+            // Logger::info("Queue: Sending item $id via {$server['domain']}", ['isp'=>$isp]);
 
             // Use Sender Worker directly to avoid double queuing in ActionScheduler
             $sender_service = new Sender();
@@ -189,6 +172,15 @@ class QueueManager {
                     'updated_at' => current_time( 'mysql' ),
                     'attempts' => $item['attempts'] + 1
                 ], [ 'id' => $id ] );
+
+                // Log detailed success
+                Logger::info("Queue: Sent Item $id", [
+                    'server' => $domain,
+                    'isp' => $isp,
+                    'strategy' => $strategy_id,
+                    'day' => $server['lb_metrics']['warmup_day'] ?? '?'
+                ]);
+
             } else {
                 $wpdb->update( $table, [
                     'status' => 'failed',
@@ -196,6 +188,11 @@ class QueueManager {
                     'updated_at' => current_time( 'mysql' ),
                     'attempts' => $item['attempts'] + 1
                 ], [ 'id' => $id ] );
+
+                Logger::error("Queue: Failed Item $id", [
+                    'server' => $domain,
+                    'error' => $result['error'] ?? 'Unknown'
+                ]);
             }
 
             // 7. Update V3 Stats (Tracking)

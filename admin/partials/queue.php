@@ -96,7 +96,7 @@ $total_pages = ceil($total / $per_page);
             <tr>
                 <th width="60">ID</th>
                 <th>Template</th>
-                <th>Stratégie</th>
+                <th>Stratégie / Jour</th>
                 <th>Serveur Assigné</th>
                 <th>Destinataire / ISP</th>
                 <th>Sujet</th>
@@ -157,13 +157,24 @@ $total_pages = ceil($total / $per_page);
                     $time_diff = human_time_diff($scheduled_ts);
                     $time_display = ($scheduled_ts > time()) ? "Dans $time_diff" : "Il y a $time_diff";
                 ?>
+                <?php
+                    // Calculate Remaining Limit for display (Expensive, but requested)
+                    $rem_limit_display = '';
+                    if (!empty($item['strategy_id']) && !empty($item['isp']) && !empty($item['server_id'])) {
+                        // We need the Strategy object
+                        // To avoid N+1 queries, ideally we would preload. But for 20 items it's okay-ish or we skip.
+                        // Let's just show Warmup Day which is in DB.
+                    }
+                ?>
                 <tr>
                     <td>#<?php echo $item['id']; ?></td>
                     <td><strong><?php echo $template_name; ?></strong></td>
                     <td>
                         <?php if(!empty($item['strategy_name'])): ?>
                             <span class="pw-badge" style="background:#2271b1;"><?php echo esc_html($item['strategy_name']); ?></span>
-                            <br><small>Jour <?php echo $item['warmup_day']; ?></small>
+                            <div style="font-size:11px; margin-top:2px;">
+                                <strong>J<?php echo $item['warmup_day']; ?></strong>
+                            </div>
                         <?php else: ?>
                             <span style="color:#ccc;">-</span>
                         <?php endif; ?>

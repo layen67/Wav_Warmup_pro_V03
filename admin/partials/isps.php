@@ -7,6 +7,8 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 use PostalWarmup\Admin\ISPManager;
 use PostalWarmup\Models\Strategy;
+use PostalWarmup\Models\Stats;
+use PostalWarmup\Models\Database;
 
 ?>
 <div class="wrap">
@@ -19,18 +21,19 @@ use PostalWarmup\Models\Strategy;
             <tr>
                 <th>Nom du Profil</th>
                 <th>Domaines Associés</th>
-                <th>Quota Jour</th>
-                <th>Quota Heure</th>
                 <th>Stratégie</th>
                 <th>Statut</th>
+                <th>Détails par Serveur</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody id="pw-isp-list">
             <?php
             $isps = ISPManager::get_all();
+            $servers = Database::get_servers(true); // Active servers
+
             if ( empty( $isps ) ): ?>
-                <tr><td colspan="7">Aucun profil ISP configuré.</td></tr>
+                <tr><td colspan="6">Aucun profil ISP configuré.</td></tr>
             <?php else: foreach ( $isps as $isp ):
                 $domains_list = implode(', ', $isp['domains']);
                 if (strlen($domains_list) > 50) $domains_list = substr($domains_list, 0, 50) . '...';
@@ -38,8 +41,6 @@ use PostalWarmup\Models\Strategy;
                 <tr data-id="<?php echo esc_attr($isp['id']); ?>" data-json="<?php echo esc_attr(json_encode($isp)); ?>">
                     <td><strong><?php echo esc_html($isp['isp_label']); ?></strong><br><small style="color:#888"><?php echo esc_html($isp['isp_key']); ?></small></td>
                     <td><?php echo esc_html($domains_list); ?></td>
-                    <td><?php echo $isp['max_daily'] > 0 ? $isp['max_daily'] : '∞'; ?></td>
-                    <td><?php echo $isp['max_hourly'] > 0 ? $isp['max_hourly'] : '∞'; ?></td>
                     <td>
                         <?php if(!empty($isp['strategy_name'])): ?>
                             <span class="pw-badge" style="background:#2271b1;"><?php echo esc_html($isp['strategy_name']); ?></span>
@@ -49,6 +50,33 @@ use PostalWarmup\Models\Strategy;
                     </td>
                     <td><?php echo $isp['active'] ? '<span class="pw-badge success">Actif</span>' : '<span class="pw-badge error">Inactif</span>'; ?></td>
                     <td>
+                        <?php
+                        // Show breakdown per server
+                        if ($servers) {
+                            echo '<div class="pw-server-stats-grid">';
+                            foreach ($servers as $srv) {
+                                $stats = Stats::get_server_isp_stats($srv['id'], $isp['isp_key']);
+                                // Calculate Limit if Strategy is set
+                                $limit_display = '-';
+                                if (!empty($isp['strategy_id'])) {
+                                    $strategy = Strategy::get($isp['strategy_id']);
+                                    if ($strategy) {
+                                        $limit = \PostalWarmup\Services\StrategyEngine::calculate_daily_limit($strategy, $stats->warmup_day, $isp['isp_key']);
+                                        $limit_display = $limit;
+                                    }
+                                }
+
+                                echo '<div class="pw-server-stat-item">';
+                                echo '<strong>' . esc_html($srv['domain']) . ':</strong> ';
+                                echo 'J' . $stats->warmup_day . ' ';
+                                echo '<span class="pw-usage">(' . $stats->sent_today . '/' . $limit_display . ')</span>';
+                                echo '</div>';
+                            }
+                            echo '</div>';
+                        }
+                        ?>
+                    </td>
+                    <td>
                         <button class="button pw-edit-isp">Éditer</button>
                         <button class="button pw-delete-isp" style="color: #b32d2e; border-color: #b32d2e;">Supprimer</button>
                     </td>
@@ -57,6 +85,12 @@ use PostalWarmup\Models\Strategy;
         </tbody>
     </table>
 </div>
+
+<style>
+.pw-server-stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 5px; font-size: 11px; }
+.pw-server-stat-item { background: #f0f0f1; padding: 3px 6px; border-radius: 3px; }
+.pw-usage { color: #666; }
+</style>
 
 <!-- Modal -->
 <div id="pw-isp-modal" class="pw-modal" style="display:none;">
@@ -80,26 +114,19 @@ use PostalWarmup\Models\Strategy;
                     <p class="description">Tous les emails se terminant par ces domaines utiliseront ce profil.</p>
                 </div>
 
-                <div style="display:flex; gap:15px; margin-bottom:15px;">
-                    <div style="flex:1;">
-                        <label>Quota Journalier</label>
-                        <input type="number" name="max_daily" id="pw-isp-daily" class="widefat" value="0">
-                    </div>
-                    <div style="flex:1;">
-                        <label>Quota Horaire</label>
-                        <input type="number" name="max_hourly" id="pw-isp-hourly" class="widefat" value="0">
-                    </div>
-                </div>
-
+                <!-- Quota Fields Removed (Replaced by Strategy) -->
+                <input type="hidden" name="max_daily" id="pw-isp-daily" value="0">
+                <input type="hidden" name="max_hourly" id="pw-isp-hourly" value="0">
 
                 <div class="pw-form-group">
                     <label>Stratégie de Warmup</label>
                     <select name="strategy_id" id="pw-isp-strategy-id" class="widefat">
-                        <option value="">-- Aucune (Utiliser Global) --</option>
+                        <option value="">-- Aucune --</option>
                         <?php foreach ( Strategy::get_all() as $s ): ?>
                             <option value="<?php echo $s['id']; ?>"><?php echo esc_html($s['name']); ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <p class="description">La stratégie détermine les volumes et règles de sécurité par serveur.</p>
                 </div>
 
                 <div class="pw-form-group">
@@ -136,6 +163,7 @@ jQuery(document).ready(function($) {
         $('#pw-isp-id').val(data.id);
         $('#pw-isp-label').val(data.isp_label);
         $('#pw-isp-domains').val(data.domains ? data.domains.join(', ') : '');
+        // Quota fields hidden but values kept just in case
         $('#pw-isp-daily').val(data.max_daily);
         $('#pw-isp-hourly').val(data.max_hourly);
         $('#pw-isp-strategy-id').val(data.strategy_id);

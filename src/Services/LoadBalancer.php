@@ -58,7 +58,7 @@ class LoadBalancer {
             $global_usage_pct = $global_limit > 0 ? ( $global_usage / $global_limit ) * 100 : 0;
             if ( $global_usage_pct > 100 ) $global_usage_pct = 100;
 
-            // 2. ISP Specific Metrics
+            // 2. ISP Specific Metrics & Safety
             $isp_stats = $target_isp ? Stats::get_server_isp_stats( $server_id, $target_isp ) : null;
 
             // Default values if no ISP context
@@ -69,16 +69,34 @@ class LoadBalancer {
             $isp_limit = 0;
             $isp_usage_pct = 0;
             $isp_limit_reached = false;
+            $safety_blocked = false;
 
             if ( $strategy_id ) {
                 $strategy = Strategy::get( $strategy_id );
                 if ( $strategy ) {
-                    $isp_limit = StrategyEngine::calculate_daily_limit( $strategy, $warmup_day );
+                    // Update V3: Pass target_isp to handle Per-ISP Overrides
+                    $isp_limit = StrategyEngine::calculate_daily_limit( $strategy, $warmup_day, $target_isp );
                     $isp_usage_pct = $isp_limit > 0 ? ( $isp_sent_today / $isp_limit ) * 100 : 0;
                     if ( $isp_usage_pct > 100 ) $isp_usage_pct = 100;
 
                     if ( $isp_limit > 0 && $isp_sent_today >= $isp_limit ) {
                         $isp_limit_reached = true;
+                    }
+
+                    // V3 Safety Check: Per Server
+                    if ( $isp_stats ) {
+                        // Cast object to array for StrategyEngine
+                        $stats_arr = [
+                            'sent_today' => $isp_stats->sent_today,
+                            'fails_today' => $isp_stats->fails_today
+                        ];
+                        $safety = StrategyEngine::check_safety_rules( $strategy, $stats_arr );
+                        if ( ! $safety['allowed'] ) {
+                            $safety_blocked = true;
+                            if ( ! $ignore_limits ) {
+                                Logger::debug( "LoadBalancer: Server {$server['domain']} excluded by safety rules for $target_isp", [ 'reason' => $safety['reason'] ] );
+                            }
+                        }
                     }
                 }
             } else {
@@ -88,7 +106,7 @@ class LoadBalancer {
 
             // Check Full
             $is_full_global = ( $global_limit > 0 && $global_usage >= $global_limit );
-            $is_full = $is_full_global || $isp_limit_reached;
+            $is_full = $is_full_global || $isp_limit_reached || $safety_blocked;
 
             // Prepare Metrics for Score
             $server['lb_metrics'] = [
@@ -117,7 +135,7 @@ class LoadBalancer {
                 // Fallback display mode: pick from full servers
                 $eligible_servers = $full_servers;
             } else {
-                Logger::warning( "LoadBalancer: Tous les serveurs sont complets (Global ou ISP limit)." );
+                Logger::warning( "LoadBalancer: Tous les serveurs sont complets (Global/ISP limit/Safety)." );
                 return null;
             }
         }
