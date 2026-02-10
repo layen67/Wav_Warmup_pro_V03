@@ -10,6 +10,7 @@ use PostalWarmup\Services\ISPDetector;
 use PostalWarmup\Models\Stats;
 use PostalWarmup\Models\Strategy;
 use PostalWarmup\Services\StrategyEngine;
+use PostalWarmup\Admin\ISPManager;
 
 class QueueManager {
 
@@ -60,7 +61,8 @@ class QueueManager {
         // 1. Load Settings
         $settings = get_option('pw_warmup_settings', []);
         $global_tz = wp_timezone_string(); // Use WP default timezone if not set in template
-        $slots = !empty($settings['schedule']) ? array_map('intval', $settings['schedule']) : []; // e.g. [8,9,10,...]
+        // Authorized hours (Global setting)
+        $slots = !empty($settings['schedule']) ? array_map('intval', $settings['schedule']) : range(9, 18); // Default 9h-18h
 
         // 2. Fetch Pending Items
         $now_mysql = current_time( 'mysql' );
@@ -86,54 +88,7 @@ class QueueManager {
                 }
             }
 
-            // 3. ISP & Strategy Limits Check
-            if ( $isp !== 'Other' ) {
-                $isp_data = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}postal_isps WHERE isp_key = %s", $isp ), ARRAY_A );
-
-                if ( $isp_data ) {
-                    // Strategy Enforcement
-                    if ( ! empty( $isp_data['strategy_id'] ) ) {
-                        $strategy = Strategy::get( $isp_data['strategy_id'] );
-                        if ( $strategy ) {
-                            $warmup_day = isset($item['warmup_day']) ? (int)$item['warmup_day'] : 1;
-
-                            // Calculate Dynamic Limit
-                            $dynamic_limit = StrategyEngine::calculate_daily_limit( $strategy, $warmup_day );
-
-                            // Check Safety
-                            $safety = StrategyEngine::check_safety_rules( $strategy, [
-                                'sent_today' => Stats::get_isp_daily_usage( $isp ),
-                                'bounces_today' => 0, // Need to implement get_bounces_today
-                                'complaints_today' => 0
-                            ]);
-
-                            if ( ! $safety['allowed'] ) {
-                                Logger::warning( "Queue: Strategy Block ({$safety['reason']})", [ 'item_id' => $id ] );
-                                self::postpone( $id, '+4 hours' ); // Safety pause
-                                continue;
-                            }
-
-                            // Use Dynamic Limit if stricter than Static
-                            if ( $dynamic_limit < ($isp_data['max_daily'] > 0 ? $isp_data['max_daily'] : 999999) ) {
-                                $isp_data['max_daily'] = $dynamic_limit;
-                            }
-                        }
-                    }
-
-                    // Hourly Limit (Still Global for now, or per server? Usually per IP but we aggregate)
-                    $limit_hourly = (int) $isp_data['max_hourly'];
-                    if ( $limit_hourly > 0 ) {
-                        $used_hourly = Stats::get_isp_hourly_usage( $isp );
-                        if ( $used_hourly >= $limit_hourly ) {
-                            Logger::info( "Queue: ISP $isp Hourly Limit Reached ($used_hourly/$limit_hourly)", [ 'item_id' => $id ] );
-                            self::postpone( $id, '+1 hour' );
-                            continue;
-                        }
-                    }
-                }
-            }
-
-            // 4. Timezone & Schedule Check
+            // 3. Timezone & Schedule Check
             $timezone = $global_tz;
             // Override with Template Timezone
             if ( $template_id ) {
@@ -144,26 +99,58 @@ class QueueManager {
             }
 
             // Check if current hour in TARGET timezone is allowed
-            if ( ! empty( $slots ) ) {
-                try {
-                    $dt = new \DateTime( 'now', new \DateTimeZone( $timezone ) );
-                    $current_hour = (int) $dt->format( 'G' );
+            // We use the timezone of the template to determine "Is it 9am-6pm THERE?"
+            try {
+                $dt = new \DateTime( 'now', new \DateTimeZone( $timezone ) );
+                $current_hour = (int) $dt->format( 'G' );
 
-                    if ( ! in_array( $current_hour, $slots, true ) ) {
-                        // Not in allowed slots
-                        self::postpone( $id, '+1 hour' );
-                        continue;
+                if ( ! in_array( $current_hour, $slots, true ) ) {
+                    // Not in allowed slots
+                    Logger::debug( "Queue: Item $id postponed (Hour $current_hour not allowed in $timezone)" );
+                    self::postpone( $id, '+1 hour' );
+                    continue;
+                }
+            } catch ( \Exception $e ) {
+                Logger::error( "Queue: Timezone Error for item $id", [ 'error' => $e->getMessage() ] );
+            }
+
+            // 4. Strategy & Safety Check (Global for ISP)
+            $strategy_id = null;
+            if ( $isp !== 'Other' ) {
+                $isp_data = ISPManager::get_by_key( $isp );
+
+                if ( $isp_data && ! empty( $isp_data['strategy_id'] ) ) {
+                    $strategy_id = $isp_data['strategy_id'];
+                    $strategy = Strategy::get( $strategy_id );
+
+                    if ( $strategy ) {
+                        // Check Global Safety Rules (e.g. Bounce Rate across all servers for this ISP)
+                        // Note: Using get_isp_daily_usage (Global) + generic bounce counter?
+                        // For now, check logic inside StrategyEngine.
+                        // Ideally we check per-server safety in LoadBalancer, but global safety here.
+
+                        /*
+                        $safety = StrategyEngine::check_safety_rules( $strategy, [
+                            'sent_today' => Stats::get_isp_daily_usage( $isp ),
+                            'fails_today' => 0 // TODO: Global fails count
+                        ]);
+
+                        if ( ! $safety['allowed'] ) {
+                            Logger::warning( "Queue: Global Strategy Block ({$safety['reason']})", [ 'item_id' => $id ] );
+                            self::postpone( $id, '+4 hours' );
+                            continue;
+                        }
+                        */
                     }
-                } catch ( \Exception $e ) {
-                    Logger::error( "Queue: Timezone Error for item $id", [ 'error' => $e->getMessage() ] );
                 }
             }
 
-            // 5. Select Server (Checks ISP limits per server)
+            // 5. Select Server (LoadBalancer V3)
+            // This handles Per-Server ISP Quotas
             $server = LoadBalancer::select_server( $template_id ?: 'default', [
                 'ignore_limits' => false,
                 'isp' => $isp,
-                'strategy_id' => $isp_data['strategy_id'] ?? null
+                'strategy_id' => $strategy_id
             ] );
 
             if ( ! $server ) {
@@ -175,17 +162,28 @@ class QueueManager {
             // 6. Send
             $meta = json_decode( $item['meta'], true );
             $prefix = $meta['prefix'] ?? 'contact';
+            // Determine "From" address: prefix@server_domain
             $domain = $server['domain'];
+            $sender_email = $prefix . '@' . $domain;
 
             $wpdb->update( $table, [
                 'status' => 'processing',
-                'server_id' => $server['id'] // Update server ID to the one actually used
+                'server_id' => $server['id'], // Update server ID to the one actually used
+                'from_email' => $sender_email // Update sender to match server
             ], [ 'id' => $id ] );
 
-            // Use Sender
-            $result = Sender::send( $item['to_email'], $domain, $prefix, $server );
+            // Use Sender Worker directly to avoid double queuing in ActionScheduler
+            $sender_service = new Sender();
+            $result = $sender_service->process_queue(
+                $item['to_email'],
+                $domain,
+                $prefix,
+                $server['id']
+            );
 
-            if ( isset( $result['success'] ) && $result['success'] ) {
+            $success = isset( $result['success'] ) && $result['success'];
+
+            if ( $success ) {
                 $wpdb->update( $table, [
                     'status' => 'sent',
                     'updated_at' => current_time( 'mysql' ),
@@ -198,15 +196,10 @@ class QueueManager {
                     'updated_at' => current_time( 'mysql' ),
                     'attempts' => $item['attempts'] + 1
                 ], [ 'id' => $id ] );
-
-                // Retry logic is handled by Sender (ActionScheduler) usually,
-                // but here we are in the queue processor.
-                // If Sender::send was synchronous fallback or async queued successfully?
-                // Sender::send returns 'queued' => true if async.
-                // If 'queued', we might want to mark as 'processing' and let async job handle it?
-                // But Sender::send logic is a bit mixed.
-                // Assuming result['success'] means "Handed off successfully" or "Sent successfully".
             }
+
+            // 7. Update V3 Stats (Tracking)
+            Stats::increment_server_isp_usage( $server['id'], $isp, $success );
         }
     }
 

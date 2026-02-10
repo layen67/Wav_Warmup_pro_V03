@@ -314,6 +314,7 @@ class Activator {
 			server_id int NOT NULL,
 			isp_key varchar(50) NOT NULL,
 			score int DEFAULT 100,
+			warmup_day int DEFAULT 1,
 			sent_today int DEFAULT 0,
 			delivered_today int DEFAULT 0,
 			fails_today int DEFAULT 0,

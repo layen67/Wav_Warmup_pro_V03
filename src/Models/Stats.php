@@ -62,19 +62,59 @@ class Stats {
     }
 
 	public static function get_server_isp_daily_usage( int $server_id, string $isp ) {
-		global $wpdb;
-		$queue_table = $wpdb->prefix . 'postal_queue';
-		$date_start = current_time( 'Y-m-d 00:00:00' );
+		// New V3 Logic: Use dedicated tracking table for speed and persistence
+		$stats = self::get_server_isp_stats( $server_id, $isp );
+		return $stats ? (int) $stats->sent_today : 0;
+	}
 
-		return (int) $wpdb->get_var( $wpdb->prepare(
-			"SELECT COUNT(*) FROM $queue_table
-             WHERE server_id = %d AND isp = %s
-             AND status IN ('sent', 'processing')
-             AND updated_at >= %s",
+	public static function get_server_isp_stats( int $server_id, string $isp_key ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_server_isp_stats';
+
+		$row = $wpdb->get_row( $wpdb->prepare(
+			"SELECT * FROM $table WHERE server_id = %d AND isp_key = %s",
 			$server_id,
-			$isp,
-			$date_start
+			$isp_key
 		) );
+
+		if ( ! $row ) {
+			// Initialize if missing
+			$wpdb->insert( $table, [
+				'server_id' => $server_id,
+				'isp_key' => $isp_key,
+				'warmup_day' => 1,
+				'sent_today' => 0,
+				'score' => 100
+			] );
+			return (object) [
+				'warmup_day' => 1,
+				'sent_today' => 0,
+				'score' => 100,
+				'fails_today' => 0
+			];
+		}
+
+		return $row;
+	}
+
+	public static function increment_server_isp_usage( int $server_id, string $isp_key, $success = true ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_server_isp_stats';
+
+		// Ensure row exists
+		self::get_server_isp_stats($server_id, $isp_key);
+
+		$sql = "UPDATE $table SET sent_today = sent_today + 1, last_updated = NOW()";
+		if ( $success ) {
+			$sql .= ", delivered_today = delivered_today + 1";
+		} else {
+			$sql .= ", fails_today = fails_today + 1";
+			// Penalize score on failure
+			$sql .= ", score = GREATEST(0, score - 5)";
+		}
+		$sql .= " WHERE server_id = %d AND isp_key = %s";
+
+		$wpdb->query( $wpdb->prepare( $sql, $server_id, $isp_key ) );
 	}
 
 	public static function get_dynamic_limit( $server ) {
@@ -567,10 +607,11 @@ class Stats {
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_servers';
 		// Only increment for active servers
-		// Logic: If limit is automatic (daily_limit = 0), we increment day.
-		// If user set a fixed limit, we might still increment day for tracking, or not.
-		// Generally good to increment for all active servers.
 		$wpdb->query( "UPDATE $table SET warmup_day = warmup_day + 1 WHERE active = 1" );
+
+		// V3: Increment ISP specific warmup days and reset daily counters
+		$table_isp = $wpdb->prefix . 'postal_server_isp_stats';
+		$wpdb->query( "UPDATE $table_isp SET warmup_day = warmup_day + 1, sent_today = 0, delivered_today = 0, fails_today = 0" );
 	}
 
 	public static function aggregate_daily_stats() {

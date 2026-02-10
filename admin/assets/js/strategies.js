@@ -17,13 +17,17 @@ jQuery(document).ready(function($) {
             data.push(current);
 
             if (type === 'mixed') {
-                let factor = 1.30;
-                if (day > 5) factor = 1.50;
-                if (day > 10) factor = 1.70;
-                if (day > 20) factor = 2.00;
-                current = Math.ceil(current * factor);
+                // Mixed: Linear (J1-J5) then Exponential
+                if (day <= 5) {
+                    current += val;
+                } else {
+                    // Exponential phase
+                    let rate = val > 1 ? val / 100 : (val || 0.10);
+                    current = Math.floor(current * (1 + rate));
+                }
             } else if (type === 'exponential') {
-                current = Math.floor(current * (1 + (val/100)));
+                let rate = val > 1 ? val / 100 : (val || 0.10);
+                current = Math.floor(current * (1 + rate));
             } else {
                 current += val;
             }

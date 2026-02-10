@@ -4,6 +4,8 @@ namespace PostalWarmup\Services;
 
 use PostalWarmup\Models\Database;
 use PostalWarmup\Services\TemplateLoader;
+use PostalWarmup\Services\LoadBalancer;
+use PostalWarmup\Services\ISPDetector;
 
 class Mailto {
 
@@ -56,8 +58,18 @@ class Mailto {
 		if ( ! empty( $atts['server'] ) ) {
 			$server = Database::get_server_by_domain( $atts['server'] );
 		} else {
-			// V3 LoadBalancer: Pass context array
-			$server = LoadBalancer::select_server( $atts['template'], [ 'ignore_limits' => true ] );
+			// V3 LoadBalancer: Context includes logged-in user ISP if available
+			$context = [ 'ignore_limits' => true ];
+
+			if ( is_user_logged_in() ) {
+				$user = wp_get_current_user();
+				if ( ! empty( $user->user_email ) ) {
+					// Detect ISP to optimize server selection based on quota/reputation for this ISP
+					$context['isp'] = ISPDetector::detect( $user->user_email );
+				}
+			}
+
+			$server = LoadBalancer::select_server( $atts['template'], $context );
 		}
 		
 		// Fallback Système si aucun serveur actif
