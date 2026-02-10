@@ -94,19 +94,11 @@ use PostalWarmup\Models\Strategy;
 
                 <div class="pw-form-group">
                     <label>Stratégie de Warmup</label>
-                    <select name="strategy_id" id="pw-isp-strategy-id" class="widefat" style="margin-bottom:5px;">
+                    <select name="strategy_id" id="pw-isp-strategy-id" class="widefat">
                         <option value="">-- Aucune (Utiliser Global) --</option>
                         <?php foreach ( Strategy::get_all() as $s ): ?>
                             <option value="<?php echo $s['id']; ?>"><?php echo esc_html($s['name']); ?></option>
                         <?php endforeach; ?>
-                    </select>
-
-                    <small>Ou preset legacy :</small>
-                    <select name="strategy" id="pw-isp-strategy" class="widefat" style="margin-top:5px;">
-                        <option value="slow_rise">Douce (Slow Rise)</option>
-                        <option value="aggressive">Agressive</option>
-                        <option value="staged">Par Paliers (Staged)</option>
-                        <option value="fixed">Fixe (Maintenance)</option>
                     </select>
                 </div>
 
@@ -147,7 +139,6 @@ jQuery(document).ready(function($) {
         $('#pw-isp-daily').val(data.max_daily);
         $('#pw-isp-hourly').val(data.max_hourly);
         $('#pw-isp-strategy-id').val(data.strategy_id);
-        $('#pw-isp-strategy').val(data.strategy);
         $('#pw-isp-active').prop('checked', data.active == 1);
 
         $('#pw-isp-modal-title').text('Modifier Profil : ' + data.isp_label);

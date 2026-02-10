@@ -417,4 +417,22 @@ class AjaxHandler {
 		ISPManager::delete( (int)$_POST['id'] );
 		wp_send_json_success();
 	}
+
+	public function ajax_save_strategy() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$result = StrategyManager::save( $_POST );
+
+		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+		else wp_send_json_success( [ 'id' => $result ] );
+	}
+
+	public function ajax_delete_strategy() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		StrategyManager::delete( (int)$_POST['id'] );
+		wp_send_json_success();
+	}
 }

@@ -353,6 +353,56 @@ class Activator {
 		add_option( 'pw_log_retention_days', 30 );
 		add_option( 'pw_stats_enabled', true );
 		add_option( 'pw_max_retries', 3 );
+
+		self::install_default_isps();
+	}
+
+	private static function install_default_isps() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_isps';
+
+		if ( $wpdb->get_var("SELECT COUNT(*) FROM $table") > 0 ) {
+			return;
+		}
+
+		$defaults = [
+			[
+				'isp_key' => 'gmail',
+				'isp_label' => 'Google / Gmail',
+				'domains' => "gmail.com\ngooglemail.com",
+				'max_daily' => 500,
+				'max_hourly' => 50,
+				'strategy' => 'slow_rise'
+			],
+			[
+				'isp_key' => 'outlook',
+				'isp_label' => 'Microsoft (Outlook/Hotmail)',
+				'domains' => "outlook.com\nhotmail.com\nlive.com\nmsn.com",
+				'max_daily' => 500,
+				'max_hourly' => 50,
+				'strategy' => 'slow_rise'
+			],
+			[
+				'isp_key' => 'yahoo',
+				'isp_label' => 'Yahoo / AOL',
+				'domains' => "yahoo.com\nymail.com\naol.com",
+				'max_daily' => 1000,
+				'max_hourly' => 100,
+				'strategy' => 'standard'
+			],
+			[
+				'isp_key' => 'orange',
+				'isp_label' => 'Orange / Wanadoo',
+				'domains' => "orange.fr\nwanadoo.fr",
+				'max_daily' => 200,
+				'max_hourly' => 20,
+				'strategy' => 'conservative'
+			]
+		];
+
+		foreach ($defaults as $isp) {
+			$wpdb->insert($table, $isp);
+		}
 	}
 
 	private static function schedule_cron_jobs() {

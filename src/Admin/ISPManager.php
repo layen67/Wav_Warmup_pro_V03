@@ -58,7 +58,6 @@ class ISPManager {
             'domains'    => json_encode( $domains ),
             'max_daily'  => absint( $data['max_daily'] ),
             'max_hourly' => absint( $data['max_hourly'] ),
-            'strategy'   => sanitize_text_field( $data['strategy'] ?? 'slow_rise' ),
             'strategy_id'=> !empty($data['strategy_id']) ? absint($data['strategy_id']) : null,
             'active'     => isset( $data['active'] ) ? 1 : 0
         ];
