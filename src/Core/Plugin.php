@@ -58,7 +58,9 @@ class Plugin {
 			'get_suppression_list', 'delete_suppression', 'get_server_health',
 			'get_advanced_stats', 'get_stats_table', 'get_server_detail',
 			'process_queue_manual', 'save_isp', 'delete_isp',
-			'save_strategy', 'delete_strategy'
+			'save_strategy', 'delete_strategy',
+			'save_scenario', 'delete_scenario', 'get_scenario_details',
+			'save_scenario_step', 'save_step_option'
 		];
 
 		foreach ( $ajax_actions as $action ) {
