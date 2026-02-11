@@ -257,7 +257,9 @@ class WebhookHandler {
 			Database::update_detailed_metrics( $template_name, $server_id, $event_type );
 			
 			// Fix: Also record global stats for relevant events
-			if ( $event_type === 'sent' || $event_type === 'delivered' ) {
+			// Note: 'sent' is skipped here because Sender::send already records it.
+			// We only record 'delivered' or other status updates to avoid double counting.
+			if ( $event_type === 'delivered' ) {
 				Database::increment_sent( $domain, true );
 				Database::record_stat( $server_id, true );
 			} elseif ( in_array( $event_type, [ 'failed', 'bounced', 'dns_error' ] ) ) {
