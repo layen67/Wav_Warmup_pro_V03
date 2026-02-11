@@ -237,6 +237,52 @@
         }
     });
 
+    // --- SERVER API KEY MODAL LOGIC ---
+    $(document).ready(function() {
+        const $modal = $('#pw-api-key-modal');
+        if (!$modal.length) return;
+
+        // Open Modal
+        $('#pw-change-api-key-btn').on('click', function(e) {
+            e.preventDefault();
+            $('#pw-new-api-key').val('');
+            $('#pw-confirm-api-key').val('');
+            $modal.fadeIn(200);
+        });
+
+        // Close Modal
+        $('#pw-modal-close, #pw-modal-cancel, .pw-modal-overlay').on('click', function(e) {
+            e.preventDefault();
+            $modal.fadeOut(200);
+        });
+
+        // Confirm Change
+        $('#pw-modal-confirm').on('click', function(e) {
+            e.preventDefault();
+            const newKey = $('#pw-new-api-key').val().trim();
+            const confirmKey = $('#pw-confirm-api-key').val().trim();
+
+            if (!newKey) {
+                alert('Veuillez entrer une clé API.');
+                return;
+            }
+
+            if (newKey !== confirmKey) {
+                alert('Les clés ne correspondent pas.');
+                return;
+            }
+
+            // Update hidden fields
+            $('#api_key_new').val(newKey);
+            $('#api_key_modified').val('1');
+
+            // Update UI to show pending change
+            $('.pw-api-key-secure input').val('CLÉ MODIFIÉE (Sauvegardez pour appliquer)').css('color', '#46b450').css('font-weight', 'bold');
+
+            $modal.fadeOut(200);
+        });
+    });
+
     // --- ADVANCED STATS MODULE (Accordion & Charts) ---
     $(document).ready(function() {
         if (!$('.pw-stats-page').length) return;
