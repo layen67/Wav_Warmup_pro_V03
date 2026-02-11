@@ -374,7 +374,16 @@ if (!$table_exists): ?>
                             </div> 
                              
                             <div class="pw-card-title-group"> 
-                                <h4 class="pw-card-title"><?php echo esc_html($tpl['name']); ?></h4> 
+                                <div>
+                                    <h4 class="pw-card-title"><?php echo esc_html($tpl['name']); ?></h4>
+                                    <?php if (!empty($tpl['timezone'])): ?>
+                                        <div class="pw-template-clock" data-timezone="<?php echo esc_attr($tpl['timezone']); ?>" style="font-size: 11px; color: #666; display: flex; align-items: center; gap: 3px; margin-top: 2px;">
+                                            <span class="dashicons dashicons-clock" style="font-size: 12px; width: 12px; height: 12px;"></span>
+                                            <span class="pw-clock-time">--:--</span>
+                                            <span style="opacity: 0.7;">(<?php echo esc_html($tpl['timezone']); ?>)</span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
                                  
                                 <div class="pw-card-badges"> 
                                     <?php if ($tpl['name'] === 'null'): ?>

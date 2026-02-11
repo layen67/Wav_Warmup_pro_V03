@@ -605,6 +605,7 @@
             this.loadTemplates(); 
             this.initSearch(); 
             this.initDragDrop();
+            this.initClocks();
         }, 
 
         initShortcodeState() {
@@ -1253,7 +1254,30 @@
                     } catch (error) { console.error('Drop error:', error); }
                 }
             });
-        }, 
+        },
+
+        initClocks() {
+            const update = () => {
+                $('.pw-template-clock').each(function() {
+                    const $el = $(this);
+                    const tz = $el.data('timezone');
+                    if (!tz) return;
+                    try {
+                        const timeString = new Intl.DateTimeFormat('fr-FR', {
+                            timeZone: tz,
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }).format(new Date());
+                        $el.find('.pw-clock-time').text(timeString);
+                    } catch (e) {
+                        // console.warn('Invalid timezone:', tz);
+                        $el.hide();
+                    }
+                });
+            };
+            update();
+            setInterval(update, 30000); // Update every 30s
+        },
          
         renderTemplates() { 
             const $container = $('#pw-templates-container'); 
