@@ -78,12 +78,46 @@ class ScenarioManager {
             'delay_minutes' => (int) $data['delay_minutes']
         ];
 
+        $step_id = 0;
         if ( ! empty( $data['id'] ) ) {
             $wpdb->update( $table, $db_data, [ 'id' => (int) $data['id'] ] );
-            return (int) $data['id'];
+            $step_id = (int) $data['id'];
         } else {
             $wpdb->insert( $table, $db_data );
-            return $wpdb->insert_id;
+            $step_id = $wpdb->insert_id;
+        }
+
+        // Handle Options if present
+        if ( isset( $data['options'] ) && is_array( $data['options'] ) ) {
+            self::save_step_options_batch( $step_id, $data['options'] );
+        }
+
+        return $step_id;
+    }
+
+    /**
+     * Sauvegarde en masse les options d'une étape
+     */
+    private static function save_step_options_batch( $step_id, $options ) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'postal_scenario_step_options';
+
+        // Delete existing options for this step
+        $wpdb->delete( $table, [ 'step_id' => $step_id ] );
+
+        // Insert new ones
+        if ( empty( $options['keyword'] ) ) return;
+
+        foreach ( $options['keyword'] as $index => $keyword ) {
+            if ( empty( $keyword ) ) continue;
+
+            $wpdb->insert( $table, [
+                'step_id'       => $step_id,
+                'reply_keyword' => sanitize_text_field( $keyword ),
+                'action'        => sanitize_text_field( $options['action'][$index] ?? 'CONTINUE' ),
+                'next_step_id'  => !empty($options['next_step_id'][$index]) ? (int)$options['next_step_id'][$index] : null,
+                'created_at'    => current_time( 'mysql' )
+            ] );
         }
     }
 

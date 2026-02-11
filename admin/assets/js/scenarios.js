@@ -38,10 +38,29 @@ jQuery(document).ready(function($) {
         });
     });
 
+    // Load Templates for Dropdown
+    function loadTemplates() {
+        $.post(pwAdmin.ajaxurl, {
+            action: 'pw_get_all_templates',
+            nonce: pwAdmin.nonce
+        }, function(res) {
+            if(res.success) {
+                const $select = $('#pw-step-template');
+                $select.empty().append('<option value="">-- Sélectionner --</option>');
+                res.data.templates.forEach(t => {
+                    if(t.name !== 'null') {
+                        $select.append(`<option value="${t.id}">${t.name}</option>`);
+                    }
+                });
+            }
+        });
+    }
+
     $('.pw-edit-scenario').on('click', function() {
         currentScenarioId = $(this).closest('.pw-scenario-card').data('id');
         $('#pw-scenario-modal').show();
         loadSteps(currentScenarioId);
+        loadTemplates(); // Load templates when opening modal
     });
 
     function loadSteps(scenarioId) {
@@ -102,7 +121,59 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // Save Step Details
+    // Add Option Row
+    $('#pw-add-option-btn').on('click', function() {
+        addOptionRow();
+    });
+
+    function addOptionRow(data = {}) {
+        const keyword = data.reply_keyword || '';
+        const action = data.action || 'CONTINUE';
+        const nextStep = data.next_step_id || '';
+
+        // Simple manual validation for now, better to assume next steps exist or use IDs
+        // For UI simplicity, let's just use numeric input for "Next Step ID" or similar.
+        // Ideally, this should be a dropdown of other steps in the scenario.
+
+        const html = `
+            <div class="pw-option-row">
+                <input type="text" name="options[keyword][]" value="${keyword}" placeholder="Mot-clé (ex: OK)" style="width:150px;">
+                <select name="options[action][]">
+                    <option value="CONTINUE" ${action === 'CONTINUE' ? 'selected' : ''}>Continuer</option>
+                    <option value="STOP_FLOW" ${action === 'STOP_FLOW' ? 'selected' : ''}>Stop</option>
+                </select>
+                <input type="number" name="options[next_step_id][]" value="${nextStep}" placeholder="ID Étape Suivante" style="width:100px;">
+                <button type="button" class="button pw-remove-option" style="color:red;">&times;</button>
+            </div>
+        `;
+        $('#pw-step-options-list').append(html);
+    }
+
+    $(document).on('click', '.pw-remove-option', function() {
+        $(this).closest('.pw-option-row').remove();
+    });
+
+    // Populate form including options
+    $(document).on('click', '#pw-steps-list li', function() {
+        const data = $(this).data('json');
+        $('#pw-step-id').val(data.id);
+        $('#pw-step-scenario-id').val(currentScenarioId); // Ensure scenario ID is set
+        $('#pw-step-num-display').text(data.step_number);
+        $('#pw-step-type').val(data.step_type);
+        $('#pw-step-template').val(data.template_id);
+        $('#pw-step-delay').val(data.delay_minutes);
+
+        // Clear and Load Options
+        $('#pw-step-options-list').empty();
+        if (data.options && Array.isArray(data.options)) {
+            data.options.forEach(opt => addOptionRow(opt));
+        }
+
+        $('#pw-step-form-container').show();
+        $('#pw-step-empty-state').hide();
+    });
+
+    // Save Step Details (Modified to include options)
     $('#pw-save-step').on('click', function(e) {
         e.preventDefault();
         const data = $('#pw-step-form').serialize();
