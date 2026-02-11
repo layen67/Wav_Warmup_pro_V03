@@ -712,6 +712,13 @@
                 this.duplicateTemplate($card);
             });
 
+            // Export
+            $(document).on('click', '.pw-export-btn', (e) => {
+                e.preventDefault();
+                const $card = $(e.currentTarget).closest('.pw-template-card');
+                this.exportTemplate($card);
+            });
+
             // Move
             $(document).on('click', '.pw-move-btn', (e) => {
                 e.preventDefault();
@@ -731,6 +738,12 @@
                 e.preventDefault();
                 const $card = $(e.currentTarget).closest('.pw-template-card');
                 this.openVersionsModal($card);
+            });
+
+            // Import Button
+            $(document).on('click', '#pw-import-btn', (e) => {
+                e.preventDefault();
+                this.openImportModal();
             });
              
             // Folders 
@@ -1078,6 +1091,75 @@
             } catch (error) {
                 console.error('Error restoring:', error);
             }
+        },
+
+        exportTemplate($card) {
+            const name = $card.data('template-name');
+            // Use form submit for file download
+            const $form = $('<form>', {
+                action: pwAdmin.ajaxurl,
+                method: 'POST'
+            });
+            $form.append($('<input>', { name: 'action', value: 'pw_export_template' }));
+            $form.append($('<input>', { name: 'nonce', value: pwAdmin.nonce }));
+            $form.append($('<input>', { name: 'name', value: name }));
+            $('body').append($form);
+            $form.submit();
+            $form.remove();
+        },
+
+        openImportModal() {
+            // Check if modal exists, if not create simple one
+            if (!$('#pw-import-modal').length) {
+                $('body').append(`
+                    <div id="pw-import-modal" class="pw-modal" style="display:none;">
+                        <div class="pw-modal-content">
+                            <div class="pw-modal-header">
+                                <h2>Importer un Template</h2>
+                                <button class="pw-modal-close">&times;</button>
+                            </div>
+                            <div class="pw-modal-body">
+                                <form id="pw-import-form" enctype="multipart/form-data">
+                                    <input type="file" name="import_file" accept=".json" required>
+                                    <p class="description">Sélectionnez un fichier JSON exporté précédemment.</p>
+                                </form>
+                            </div>
+                            <div class="pw-modal-footer">
+                                <button class="pw-modal-cancel button">Annuler</button>
+                                <button id="pw-confirm-import" class="button button-primary">Importer</button>
+                            </div>
+                        </div>
+                    </div>
+                `);
+            }
+            $('#pw-import-modal').css('display', 'flex');
+
+            $('#pw-confirm-import').off('click').on('click', async (e) => {
+                e.preventDefault();
+                const formData = new FormData($('#pw-import-form')[0]);
+                formData.append('action', 'pw_import_templates');
+                formData.append('nonce', pwAdmin.nonce);
+
+                try {
+                    const response = await $.ajax({
+                        url: pwAdmin.ajaxurl,
+                        type: 'POST',
+                        data: formData,
+                        processData: false,
+                        contentType: false
+                    });
+
+                    if (response.success) {
+                        alert(response.data.message);
+                        location.reload();
+                    } else {
+                        alert('Erreur: ' + (response.data.message || 'Fichier invalide'));
+                    }
+                } catch (error) {
+                    console.error('Import error:', error);
+                    alert('Erreur réseau lors de l\'import.');
+                }
+            });
         },
          
         filterByFolder(folderId) { 

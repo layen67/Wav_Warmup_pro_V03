@@ -413,10 +413,8 @@ if ($action === 'delete' && $server_id) {
                                     <div style="font-size:11px; color:#666;"><?php echo esc_html($server['timezone'] ?: 'UTC'); ?></div>
                                 </td>
                                 <td>
-                                    <strong><?php echo $daily_used; ?></strong> / <?php echo $limit_display; ?>
-                                    <div class="pw-progress-bar" style="background:#eee; height:5px; width:100px; margin-top:5px; border-radius:3px;">
-                                        <div style="background:<?php echo ($usage_pct > 90 ? '#d63638' : '#2271b1'); ?>; width:<?php echo min(100, $usage_pct); ?>%; height:100%; border-radius:3px;"></div>
-                                    </div>
+                                    <strong><?php echo $daily_used; ?></strong> <small>(Total Aujourd'hui)</small>
+                                    <br><small style="color:#888"><?php _e('Géré par Stratégie/ISP', 'postal-warmup'); ?></small>
                                 </td>
                                 <td><?php echo isset($server['priority']) ? $server['priority'] : 10; ?></td>
                                 <td>
