@@ -10,18 +10,30 @@ if (!defined('WP_UNINSTALL_PLUGIN')) {
 
 global $wpdb;
 
-// Supprimer les tables
-$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}postal_servers");
-$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}postal_logs");
-$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}postal_stats");
-$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}postal_mailto_clicks");
-$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}postal_templates");
-$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}postal_template_folders");
-$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}postal_template_tags");
-$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}postal_template_tag_relations");
-$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}postal_template_versions");
-$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}postal_template_saved_searches");
-$wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}postal_metrics");
+// Liste complète des tables à supprimer
+$tables = [
+    'postal_servers',
+    'postal_logs',
+    'postal_stats',
+    'postal_mailto_clicks',
+    'postal_templates',
+    'postal_template_folders',
+    'postal_template_tags',
+    'postal_template_tag_relations',
+    'postal_template_versions',
+    'postal_template_saved_searches',
+    'postal_metrics',
+    'postal_stats_daily',
+    'postal_stats_history',
+    'postal_queue',
+    'postal_isps',
+    'postal_server_isp_stats',
+    'postal_strategies'
+];
+
+foreach ($tables as $table) {
+    $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}{$table}");
+}
 
 // Supprimer les options
 $options = [
@@ -29,10 +41,12 @@ $options = [
     'pw_webhook_secret',
     'pw_webhook_strict_mode',
     'pw_enable_logging',
+    'pw_log_mode',
     'pw_log_retention_days',
     'pw_max_retries',
     'pw_stats_enabled',
     'pw_stats_retention_days',
+    'pw_queue_retention_days',
     'pw_email_notifications',
     'pw_notification_email',
     'pw_daily_report',
@@ -42,7 +56,9 @@ $options = [
     'pw_default_from_name',
     'pw_default_subject',
     'pw_feature_flags',
-    'pw_public_stats'
+    'pw_public_stats',
+    'pw_global_tag',
+    'pw_warmup_settings'
 ];
 
 foreach ($options as $option) {
@@ -82,3 +98,7 @@ foreach ($roles as $role_name) {
 wp_clear_scheduled_hook('pw_cleanup_old_logs');
 wp_clear_scheduled_hook('pw_cleanup_old_stats');
 wp_clear_scheduled_hook('pw_daily_report');
+wp_clear_scheduled_hook('pw_daily_stats_aggregation');
+wp_clear_scheduled_hook('pw_process_queue');
+wp_clear_scheduled_hook('pw_warmup_daily_increment');
+wp_clear_scheduled_hook('pw_cleanup_queue');
