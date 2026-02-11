@@ -41,12 +41,36 @@ $total_pages = ceil($total / $per_page);
     <?php
     $retention = get_option('pw_queue_retention_days', 30);
     $health = \PostalWarmup\Services\QueueManager::get_health_stats();
+
+    // Prediction Next Batch
+    $next_batch = \PostalWarmup\Services\QueueManager::get_next_batch_info();
     ?>
     <p class="description" style="display:inline-block; margin-left: 10px;">
         (Rétention : <?php echo $retention; ?> jours)
     </p>
 
     <hr class="wp-header-end">
+
+    <?php if ($next_batch): ?>
+    <div class="notice notice-info inline" style="border-left-color: #2271b1; padding: 10px 12px; margin-bottom: 20px; display:flex; align-items:center;">
+        <span class="dashicons dashicons-clock" style="color: #2271b1; margin-right: 10px;"></span>
+        <div>
+            <strong>Prochaine vague :</strong>
+            <span style="font-weight:bold; color:#2271b1; font-size:1.1em;"><?php echo $next_batch['count']; ?></span> email(s) prévu(s)
+
+            <?php if ($next_batch['is_now']): ?>
+                <strong>immédiatement</strong> (retard ou en cours).
+            <?php else:
+                $diff = $next_batch['timestamp'] - time();
+                $diff_min = ceil($diff / 60);
+                $time_str = date_i18n(get_option('time_format'), $next_batch['timestamp']);
+                $human_diff = human_time_diff($next_batch['timestamp']);
+            ?>
+                dans <strong><?php echo $human_diff; ?></strong> (à <?php echo $time_str; ?>).
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <div class="pw-health-monitor">
         <div class="pw-health-card">

@@ -259,4 +259,50 @@ class QueueManager {
 
         return $stats;
     }
+
+    /**
+     * Récupère les infos sur la prochaine vague d'envois prévue
+     */
+    public static function get_next_batch_info() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'postal_queue';
+
+        // Trouver la date minimale prévue dans le futur
+        $next_time = $wpdb->get_var("
+            SELECT MIN(scheduled_at)
+            FROM $table
+            WHERE status = 'pending'
+            AND scheduled_at > NOW()
+        ");
+
+        if ( ! $next_time ) {
+            // Si rien dans le futur, check si on a des pending "maintenant" (ou en retard)
+            $pending_now = $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE status = 'pending' AND scheduled_at <= NOW()");
+            if ($pending_now > 0) {
+                return [
+                    'count' => $pending_now,
+                    'time' => 'Maintenant',
+                    'timestamp' => time(),
+                    'is_now' => true
+                ];
+            }
+            return null;
+        }
+
+        // Compter combien d'emails pour ce créneau précis (ou minute précise)
+        // On groupe par minute
+        $count = $wpdb->get_var($wpdb->prepare("
+            SELECT COUNT(*)
+            FROM $table
+            WHERE status = 'pending'
+            AND scheduled_at BETWEEN %s AND %s
+        ", $next_time, date('Y-m-d H:i:59', strtotime($next_time))));
+
+        return [
+            'count' => $count,
+            'time' => $next_time,
+            'timestamp' => strtotime($next_time),
+            'is_now' => false
+        ];
+    }
 }
