@@ -172,6 +172,9 @@ class TemplateManager {
 			'status'     => $meta['status'],
 			'tags'       => implode( ',', $meta['tags'] ),
 			'timezone'   => $meta['timezone'] ?? null,
+			'allowed_start_hour' => isset($meta['allowed_start_hour']) ? (int)$meta['allowed_start_hour'] : 9,
+			'allowed_end_hour'   => isset($meta['allowed_end_hour']) ? (int)$meta['allowed_end_hour'] : 18,
+			'scenario_id'        => !empty($meta['scenario_id']) ? (int)$meta['scenario_id'] : null,
 			'updated_at' => current_time( 'mysql' )
 		];
 

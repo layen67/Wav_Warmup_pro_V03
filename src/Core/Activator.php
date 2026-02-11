@@ -133,6 +133,9 @@ class Activator {
 			folder_id bigint DEFAULT NULL,
 			status varchar(20) DEFAULT 'active',
 			timezone varchar(50) DEFAULT NULL,
+			allowed_start_hour tinyint DEFAULT 9,
+			allowed_end_hour tinyint DEFAULT 18,
+			scenario_id bigint DEFAULT NULL,
 			is_favorite tinyint(1) DEFAULT 0,
 			tags text DEFAULT NULL,
 			stats_cache longtext DEFAULT NULL,
@@ -145,7 +148,8 @@ class Activator {
 			PRIMARY KEY  (id),
 			UNIQUE KEY name (name),
 			KEY idx_folder (folder_id),
-			KEY idx_status (status)
+			KEY idx_status (status),
+			KEY idx_scenario (scenario_id)
 		) $charset_collate;";
 		dbDelta( $sql_templates );
 
@@ -299,6 +303,10 @@ class Activator {
 			max_hourly int DEFAULT 0,
 			strategy varchar(50) DEFAULT 'slow_rise',
 			strategy_id bigint DEFAULT NULL,
+			override_start_volume int DEFAULT NULL,
+			override_growth_value float DEFAULT NULL,
+			override_growth_type varchar(20) DEFAULT NULL,
+			override_max_volume int DEFAULT NULL,
 			active tinyint(1) DEFAULT 1,
 			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),

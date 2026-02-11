@@ -85,6 +85,13 @@
                         $('#pw-editor-timezone').val('');
                     }
 
+                    // Allowed Hours
+                    $('#pw-editor-start-hour').val(tpl.allowed_start_hour || 9);
+                    $('#pw-editor-end-hour').val(tpl.allowed_end_hour || 18);
+
+                    // Scenario
+                    $('#pw-editor-scenario').val(tpl.scenario_id || '');
+
                     if (tpl.tags && Array.isArray(tpl.tags)) {
                         const tagNames = tpl.tags.map(t => typeof t === 'object' ? t.name : t).join(', ');
                         $('#pw-editor-tags').val(tagNames);

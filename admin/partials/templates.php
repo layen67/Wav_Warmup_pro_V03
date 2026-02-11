@@ -18,6 +18,11 @@ $uncategorized_id = PW_Template_Manager::ensure_uncategorized_folder();
 $tags = PW_Template_Manager::get_all_tags(); 
 $stats_global = PW_Stats::get_templates_global_stats(); 
 
+// Récupérer les scénarios pour le sélecteur
+global $wpdb;
+$table_scenarios = $wpdb->prefix . 'postal_scenarios';
+$scenarios = $wpdb->get_results("SELECT id, name FROM $table_scenarios WHERE status = 'active' ORDER BY name ASC");
+
 // === DEBUG MODE ===
 $debug_mode = defined('WP_DEBUG') && WP_DEBUG; 
 

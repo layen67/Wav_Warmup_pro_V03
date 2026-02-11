@@ -90,24 +90,41 @@ class QueueManager {
 
             // 3. Timezone & Schedule Check
             $timezone = $global_tz;
-            // Override with Template Timezone
+            $start_h = 9;
+            $end_h = 18;
+
             if ( $template_id ) {
-                $tpl_tz = $wpdb->get_var( $wpdb->prepare( "SELECT timezone FROM {$wpdb->prefix}postal_templates WHERE id = %d", $template_id ) );
-                if ( ! empty( $tpl_tz ) ) {
-                    $timezone = $tpl_tz;
+                // Fetch allowed hours from template if defined
+                $tpl_row = $wpdb->get_row( $wpdb->prepare( "SELECT timezone, allowed_start_hour, allowed_end_hour FROM {$wpdb->prefix}postal_templates WHERE id = %d", $template_id ) );
+                if ( $tpl_row ) {
+                    if ( ! empty( $tpl_row->timezone ) ) $timezone = $tpl_row->timezone;
+                    if ( isset( $tpl_row->allowed_start_hour ) ) $start_h = (int)$tpl_row->allowed_start_hour;
+                    if ( isset( $tpl_row->allowed_end_hour ) ) $end_h = (int)$tpl_row->allowed_end_hour;
                 }
             }
 
             // Check if current hour in TARGET timezone is allowed
-            // We use the timezone of the template to determine "Is it 9am-6pm THERE?"
             try {
                 $dt = new \DateTime( 'now', new \DateTimeZone( $timezone ) );
                 $current_hour = (int) $dt->format( 'G' );
 
-                if ( ! in_array( $current_hour, $slots, true ) ) {
+                if ( $current_hour < $start_h || $current_hour >= $end_h ) {
                     // Not in allowed slots
-                    Logger::debug( "Queue: Item $id postponed (Hour $current_hour not allowed in $timezone)" );
-                    self::postpone( $id, '+1 hour' );
+                    Logger::debug( "Queue: Item $id postponed (Hour $current_hour not allowed in $timezone [{$start_h}-{$end_h}])" );
+
+                    // Postpone to next available slot
+                    $next_run = clone $dt;
+                    if ( $current_hour < $start_h ) {
+                        // Today, later
+                        $next_run->setTime($start_h, rand(0,59), 0);
+                    } else {
+                        // Tomorrow, start
+                        $next_run->modify('+1 day');
+                        $next_run->setTime($start_h, rand(0,59), 0);
+                    }
+                    $next_run->setTimezone(new \DateTimeZone('UTC')); // Convert back to UTC for DB
+
+                    $wpdb->update( $table, [ 'scheduled_at' => $next_run->format('Y-m-d H:i:s') ], [ 'id' => $id ] );
                     continue;
                 }
             } catch ( \Exception $e ) {

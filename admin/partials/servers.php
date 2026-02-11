@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $api_url = esc_url_raw($_POST['api_url']);
         $api_key = sanitize_text_field($_POST['api_key']);
         $active = !empty($_POST['active']) ? 1 : 0;
-        $daily_limit = isset($_POST['daily_limit']) ? (int)$_POST['daily_limit'] : 0;
+        // $daily_limit = isset($_POST['daily_limit']) ? (int)$_POST['daily_limit'] : 0; // Deprecated
         $priority = isset($_POST['priority']) ? (int)$_POST['priority'] : 10;
         $timezone = sanitize_text_field($_POST['timezone']);
         
@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'api_url' => $api_url,
                 'api_key' => $api_key,
                 'active' => $active,
-                'daily_limit' => $daily_limit,
+                'daily_limit' => 0, // Force unlimited, controlled by Strategy
                 'priority' => $priority,
                 'timezone' => $timezone
             ));
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $domain = sanitize_text_field($_POST['domain']);
         $api_url = esc_url_raw($_POST['api_url']);
         $active = !empty($_POST['active']) ? 1 : 0;
-        $daily_limit = isset($_POST['daily_limit']) ? (int)$_POST['daily_limit'] : 0;
+        // $daily_limit = isset($_POST['daily_limit']) ? (int)$_POST['daily_limit'] : 0;
         $priority = isset($_POST['priority']) ? (int)$_POST['priority'] : 10;
         $timezone = sanitize_text_field($_POST['timezone']);
         
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'domain' => $domain,
             'api_url' => $api_url,
             'active' => $active,
-            'daily_limit' => $daily_limit,
+            'daily_limit' => 0, // Deprecated
             'priority' => $priority,
             'timezone' => $timezone
         );
@@ -169,6 +169,7 @@ if ($action === 'delete' && $server_id) {
                             </p>
                         </td>
                     </tr>
+                    <!-- Deprecated Daily Limit
                     <tr>
                         <th scope="row">
                             <label for="daily_limit"><?php _e('Limite Quotidienne', 'postal-warmup'); ?></label>
@@ -178,6 +179,7 @@ if ($action === 'delete' && $server_id) {
                             <p class="description"><?php _e('0 = Illimité. Emails max par jour.', 'postal-warmup'); ?></p>
                         </td>
                     </tr>
+                    -->
                     <tr>
                         <th scope="row">
                             <label for="priority"><?php _e('Priorité', 'postal-warmup'); ?></label>

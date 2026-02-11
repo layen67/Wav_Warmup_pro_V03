@@ -59,6 +59,10 @@ class ISPManager {
             'max_daily'  => absint( $data['max_daily'] ),
             'max_hourly' => absint( $data['max_hourly'] ),
             'strategy_id'=> !empty($data['strategy_id']) ? absint($data['strategy_id']) : null,
+            'override_start_volume' => !empty($data['override_start_volume']) ? absint($data['override_start_volume']) : null,
+            'override_max_volume'   => !empty($data['override_max_volume']) ? absint($data['override_max_volume']) : null,
+            'override_growth_type'  => !empty($data['override_growth_type']) ? sanitize_text_field($data['override_growth_type']) : null,
+            'override_growth_value' => !empty($data['override_growth_value']) ? (float)$data['override_growth_value'] : null,
             'active'     => isset( $data['active'] ) ? 1 : 0
         ];
 

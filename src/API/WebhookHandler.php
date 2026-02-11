@@ -9,6 +9,7 @@ use PostalWarmup\Services\Logger;
 use PostalWarmup\Services\QueueManager;
 use PostalWarmup\Models\Database;
 use PostalWarmup\Services\ScenarioEngine;
+use PostalWarmup\Modules\ScenarioEngine\PostalReplyAdapter;
 
 /**
  * Gestionnaire de webhook REST API
@@ -71,12 +72,17 @@ class WebhookHandler {
 		if ( empty( $data ) ) {
 			return new WP_REST_Response( [ 'status' => 'error', 'message' => 'Invalid JSON' ], 400 );
 		}
+
+		// Priority: Check if it's a Scenario Reply
+		if ( PostalReplyAdapter::handle( $data ) ) {
+			return new WP_REST_Response( [ 'status' => 'ok', 'handler' => 'scenario_engine' ], 200 );
+		}
 		
 		// Events
 		if ( isset( $data['event'] ) ) {
 			$this->handle_event( $data );
 		} elseif ( isset( $data['rcpt_to'] ) ) {
-			// Incoming message (if configured to route to this URL)
+			// Incoming message (Legacy Route Handler)
 			$this->handle_incoming_message( $data );
 		}
 		

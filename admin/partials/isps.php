@@ -122,12 +122,41 @@ use PostalWarmup\Models\Database;
                     <label>Stratégie de Warmup</label>
                     <select name="strategy_id" id="pw-isp-strategy-id" class="widefat">
                         <option value="">-- Aucune --</option>
-                        <?php foreach ( Strategy::get_all() as $s ): ?>
+                        <?php foreach ( \PostalWarmup\Models\Strategy::get_all() as $s ): ?>
                             <option value="<?php echo $s['id']; ?>"><?php echo esc_html($s['name']); ?></option>
                         <?php endforeach; ?>
                     </select>
                     <p class="description">La stratégie détermine les volumes et règles de sécurité par serveur.</p>
                 </div>
+
+                <fieldset style="border:1px solid #ddd; padding:10px; margin-bottom:15px;">
+                    <legend style="font-weight:600;">Surcharge de la Stratégie (Optionnel)</legend>
+                    <div style="display:flex; gap:10px;">
+                        <div class="pw-form-group" style="flex:1;">
+                            <label>Start Volume</label>
+                            <input type="number" name="override_start_volume" id="pw-isp-override-start" class="widefat" placeholder="Défaut">
+                        </div>
+                        <div class="pw-form-group" style="flex:1;">
+                            <label>Max Volume</label>
+                            <input type="number" name="override_max_volume" id="pw-isp-override-max" class="widefat" placeholder="Défaut">
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:10px;">
+                        <div class="pw-form-group" style="flex:1;">
+                            <label>Growth Type</label>
+                            <select name="override_growth_type" id="pw-isp-override-type" class="widefat">
+                                <option value="">Défaut</option>
+                                <option value="linear">Linear</option>
+                                <option value="exponential">Exponential</option>
+                                <option value="mixed">Mixed</option>
+                            </select>
+                        </div>
+                        <div class="pw-form-group" style="flex:1;">
+                            <label>Growth Value</label>
+                            <input type="number" step="0.01" name="override_growth_value" id="pw-isp-override-value" class="widefat" placeholder="Défaut">
+                        </div>
+                    </div>
+                </fieldset>
 
                 <div class="pw-form-group">
                     <label>
@@ -167,6 +196,12 @@ jQuery(document).ready(function($) {
         $('#pw-isp-daily').val(data.max_daily);
         $('#pw-isp-hourly').val(data.max_hourly);
         $('#pw-isp-strategy-id').val(data.strategy_id);
+
+        $('#pw-isp-override-start').val(data.override_start_volume);
+        $('#pw-isp-override-max').val(data.override_max_volume);
+        $('#pw-isp-override-type').val(data.override_growth_type);
+        $('#pw-isp-override-value').val(data.override_growth_value);
+
         $('#pw-isp-active').prop('checked', data.active == 1);
 
         $('#pw-isp-modal-title').text('Modifier Profil : ' + data.isp_label);

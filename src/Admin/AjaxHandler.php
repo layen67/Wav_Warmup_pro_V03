@@ -94,7 +94,10 @@ class AjaxHandler {
 			'folder_id' => (int) ( $_POST['folder_id'] ?? 0 ),
 			'status'    => sanitize_text_field( $_POST['status'] ?? 'active' ),
 			'tags'      => array_map( 'sanitize_text_field', explode( ',', $_POST['tags'] ?? '' ) ),
-			'timezone'  => sanitize_text_field( $_POST['timezone'] ?? '' )
+			'timezone'  => sanitize_text_field( $_POST['timezone'] ?? '' ),
+			'allowed_start_hour' => (int) ( $_POST['allowed_start_hour'] ?? 9 ),
+			'allowed_end_hour'   => (int) ( $_POST['allowed_end_hour'] ?? 18 ),
+			'scenario_id'        => (int) ( $_POST['scenario_id'] ?? 0 )
 		];
 		
 		$result = TemplateManager::save_template( $name, $data, $meta );

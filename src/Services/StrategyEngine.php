@@ -11,19 +11,37 @@ class StrategyEngine {
      * @param int $day Le jour actuel de warmup (1-indexed)
      * @return int La limite d'envoi pour ce jour
      */
-    public static function calculate_daily_limit( $strategy, $day ) {
+    public static function calculate_daily_limit( $strategy, $day, $target_isp = null ) {
         if ( ! is_array( $strategy ) ) {
             return 50; // Fallback safe limit
         }
 
-        $config = $strategy['config'] ?? []; // Handle if config is nested or direct
-        // If config is inside strategy['config'], extract it.
-        // Usually strategy row has 'config_json' which is decoded into 'config'.
+        $config = $strategy['config'] ?? [];
 
         $start = (int) ($config['start_volume'] ?? 10);
         $max = (int) ($config['max_volume'] ?? 1000);
         $type = $config['growth_type'] ?? 'linear';
         $value = (float) ($config['growth_value'] ?? 10);
+
+        // Check ISP Overrides
+        if ( $target_isp ) {
+            // Use fully qualified name or ensure proper import
+            // We assume ISPManager is available via autoload
+            $isp_data = \PostalWarmup\Admin\ISPManager::get_by_key( $target_isp );
+            if ( $isp_data ) {
+                if ( isset($isp_data['override_start_volume']) && $isp_data['override_start_volume'] !== null && $isp_data['override_start_volume'] !== '' )
+                    $start = (int)$isp_data['override_start_volume'];
+
+                if ( isset($isp_data['override_max_volume']) && $isp_data['override_max_volume'] !== null && $isp_data['override_max_volume'] !== '' )
+                    $max = (int)$isp_data['override_max_volume'];
+
+                if ( isset($isp_data['override_growth_type']) && !empty($isp_data['override_growth_type']) )
+                    $type = $isp_data['override_growth_type'];
+
+                if ( isset($isp_data['override_growth_value']) && $isp_data['override_growth_value'] !== null && $isp_data['override_growth_value'] !== '' )
+                    $value = (float)$isp_data['override_growth_value'];
+            }
+        }
 
         if ( $day <= 1 ) return $start;
 
