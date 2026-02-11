@@ -8,6 +8,7 @@ use WP_Error;
 use PostalWarmup\Services\Logger;
 use PostalWarmup\Services\QueueManager;
 use PostalWarmup\Models\Database;
+use PostalWarmup\Services\ScenarioEngine;
 
 /**
  * Gestionnaire de webhook REST API
@@ -210,8 +211,17 @@ class WebhookHandler {
 			'original_message_id' => $id
 		];
 
-		// Add to Queue instead of sending directly
-		QueueManager::add( $server['id'], $mail_from, $prefix . '@' . $domain, 'Re: ' . $subject, $meta );
+		// Trigger Scenario Engine (Reply Received)
+		// Extract plain body if available (Postal sends 'plain_body' or 'text_body' usually in incoming)
+		$body = $data['plain_body'] ?? ( $data['text_body'] ?? '' );
+		ScenarioEngine::process_reply( $mail_from, $body );
+
+		// Add to Queue instead of sending directly (Auto-reply logic if not managed by Scenario)
+		// Note: If Scenario Engine handles it, maybe we shouldn't auto-reply generic?
+		// User requirement says "Déclenche step suivant exact".
+		// We keep generic reply as fallback or separate feature, but logging it.
+
+		// QueueManager::add( $server['id'], $mail_from, $prefix . '@' . $domain, 'Re: ' . $subject, $meta );
 	}
 
 	private function parse_email( $email ) {

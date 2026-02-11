@@ -339,6 +339,66 @@ class Activator {
 			UNIQUE KEY name (name)
 		) $charset_collate;";
 		dbDelta( $sql_strategies );
+
+		// 17. Scenarios
+		$table_scenarios = $wpdb->prefix . 'postal_scenarios';
+		$sql_scenarios = "CREATE TABLE $table_scenarios (
+			id bigint NOT NULL AUTO_INCREMENT,
+			name varchar(255) NOT NULL,
+			description text DEFAULT NULL,
+			status enum('active', 'inactive') DEFAULT 'active',
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id)
+		) $charset_collate;";
+		dbDelta( $sql_scenarios );
+
+		// 18. Scenario Steps
+		$table_scenario_steps = $wpdb->prefix . 'postal_scenario_steps';
+		$sql_scenario_steps = "CREATE TABLE $table_scenario_steps (
+			id bigint NOT NULL AUTO_INCREMENT,
+			scenario_id bigint NOT NULL,
+			step_number int NOT NULL,
+			template_id bigint DEFAULT NULL,
+			step_type enum('SEND', 'WAIT', 'BRANCH', 'JUMP_STEP') DEFAULT 'SEND',
+			delay_minutes int DEFAULT 0,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			PRIMARY KEY  (id),
+			KEY idx_scenario (scenario_id),
+			KEY idx_order (scenario_id, step_number)
+		) $charset_collate;";
+		dbDelta( $sql_scenario_steps );
+
+		// 19. Scenario Step Options (Conditions/Replies)
+		$table_scenario_step_options = $wpdb->prefix . 'postal_scenario_step_options';
+		$sql_scenario_step_options = "CREATE TABLE $table_scenario_step_options (
+			id bigint NOT NULL AUTO_INCREMENT,
+			step_id bigint NOT NULL,
+			reply_keyword varchar(100) DEFAULT NULL,
+			next_step_id bigint DEFAULT NULL,
+			action enum('CONTINUE', 'STOP_FLOW', 'JUMP_SCENARIO') DEFAULT 'CONTINUE',
+			target_scenario_id bigint DEFAULT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			PRIMARY KEY  (id),
+			KEY idx_step (step_id)
+		) $charset_collate;";
+		dbDelta( $sql_scenario_step_options );
+
+		// 20. Scenario Logs (Tracking)
+		$table_scenario_logs = $wpdb->prefix . 'postal_scenario_logs';
+		$sql_scenario_logs = "CREATE TABLE $table_scenario_logs (
+			id bigint NOT NULL AUTO_INCREMENT,
+			scenario_id bigint NOT NULL,
+			email varchar(255) NOT NULL,
+			current_step_id bigint DEFAULT NULL,
+			status enum('pending', 'active', 'completed', 'stopped') DEFAULT 'active',
+			last_activity datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			meta longtext DEFAULT NULL,
+			PRIMARY KEY  (id),
+			KEY idx_email (email),
+			KEY idx_status (status)
+		) $charset_collate;";
+		dbDelta( $sql_scenario_logs );
 	}
 
 	private static function set_default_options() {
