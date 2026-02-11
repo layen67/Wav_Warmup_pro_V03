@@ -49,10 +49,16 @@ class ScenarioManager {
         ];
 
         if ( ! empty( $data['id'] ) ) {
-            $wpdb->update( $table, $db_data, [ 'id' => (int) $data['id'] ] );
+            $result = $wpdb->update( $table, $db_data, [ 'id' => (int) $data['id'] ] );
+            if ( $result === false ) {
+                return new \WP_Error( 'db_error', 'Erreur lors de la mise à jour : ' . $wpdb->last_error );
+            }
             return (int) $data['id'];
         } else {
-            $wpdb->insert( $table, $db_data );
+            $result = $wpdb->insert( $table, $db_data );
+            if ( $result === false ) {
+                return new \WP_Error( 'db_error', 'Erreur lors de la création : ' . $wpdb->last_error );
+            }
             return $wpdb->insert_id;
         }
     }

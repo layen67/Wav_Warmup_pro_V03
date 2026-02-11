@@ -8,6 +8,20 @@ use PostalWarmup\Admin\ScenarioManager;
     <button class="page-title-action" id="pw-add-scenario-btn">Créer un Scénario</button>
     <hr class="wp-header-end">
 
+    <?php
+    global $wpdb;
+    $table_scenarios = $wpdb->prefix . 'postal_scenarios';
+    if ( $wpdb->get_var("SHOW TABLES LIKE '$table_scenarios'") !== $table_scenarios ) :
+    ?>
+        <div class="notice notice-error" style="margin: 20px 0; padding: 20px;">
+            <h3>🚨 Base de données incomplète</h3>
+            <p>La table des scénarios est manquante. Veuillez initialiser la base de données.</p>
+            <form method="post" action="<?php echo admin_url('admin.php?page=postal-warmup-templates'); ?>">
+                <button type="submit" class="button button-primary">Aller à la page Templates pour réparer</button>
+            </form>
+        </div>
+    <?php endif; ?>
+
     <div class="pw-scenarios-grid">
         <?php
         $scenarios = ScenarioManager::get_all();

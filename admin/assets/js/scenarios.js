@@ -32,6 +32,9 @@ jQuery(document).ready(function($) {
             } else {
                 alert('Erreur: ' + (res.data ? res.data.message : 'Inconnue'));
             }
+        }).fail(function(xhr, status, error) {
+            console.error('AJAX Error:', status, error, xhr.responseText);
+            alert('Erreur serveur lors de la création du scénario.');
         });
     });
 
