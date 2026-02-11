@@ -1,6 +1,40 @@
 jQuery(document).ready(function($) {
     let currentScenarioId = null;
 
+    // Create New Scenario
+    $('#pw-add-scenario-btn').on('click', function(e) {
+        e.preventDefault();
+
+        // Simple prompt for now (could be a nice modal later)
+        const name = prompt("Nom du nouveau scénario :");
+        if (!name) return;
+
+        const description = prompt("Description (optionnel) :") || '';
+
+        $.post(pwAdmin.ajaxurl, {
+            action: 'pw_save_scenario',
+            nonce: pwAdmin.nonce,
+            name: name,
+            description: description,
+            status: 'active'
+        }, function(res) {
+            if(res.success) {
+                // Open editor directly
+                currentScenarioId = res.data.id;
+                $('#pw-scenario-modal').show();
+                loadSteps(currentScenarioId);
+                // Also could reload page to see it in list, but let's edit first
+                // Actually reloading list is complex without reload page.
+                // We will reload page when modal closes if changes were made?
+                // For now, let's just reload to update the grid, OR manually add card.
+                // Simple: reload page to ensure consistency.
+                location.reload();
+            } else {
+                alert('Erreur: ' + (res.data ? res.data.message : 'Inconnue'));
+            }
+        });
+    });
+
     $('.pw-edit-scenario').on('click', function() {
         currentScenarioId = $(this).closest('.pw-scenario-card').data('id');
         $('#pw-scenario-modal').show();

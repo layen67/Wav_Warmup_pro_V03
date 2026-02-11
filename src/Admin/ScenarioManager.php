@@ -103,4 +103,25 @@ class ScenarioManager {
             return $wpdb->insert_id;
         }
     }
+
+    /**
+     * Supprime un scénario et ses dépendances
+     */
+    public static function delete( $id ) {
+        global $wpdb;
+        $table_scenarios = $wpdb->prefix . 'postal_scenarios';
+        $table_steps = $wpdb->prefix . 'postal_scenario_steps';
+        $table_options = $wpdb->prefix . 'postal_scenario_step_options';
+
+        // Get all steps to delete options
+        $steps = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM $table_steps WHERE scenario_id = %d", $id ) );
+
+        if ( ! empty( $steps ) ) {
+            $steps_list = implode( ',', array_map( 'intval', $steps ) );
+            $wpdb->query( "DELETE FROM $table_options WHERE step_id IN ($steps_list)" );
+        }
+
+        $wpdb->delete( $table_steps, [ 'scenario_id' => $id ] );
+        return $wpdb->delete( $table_scenarios, [ 'id' => $id ] );
+    }
 }

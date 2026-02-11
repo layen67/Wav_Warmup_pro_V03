@@ -438,4 +438,54 @@ class AjaxHandler {
 		StrategyManager::delete( (int)$_POST['id'] );
 		wp_send_json_success();
 	}
+
+	// --- Scenario Engine AJAX ---
+
+	public function ajax_save_scenario() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$result = ScenarioManager::save( $_POST );
+
+		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+		else wp_send_json_success( [ 'id' => $result ] );
+	}
+
+	public function ajax_delete_scenario() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		ScenarioManager::delete( (int)$_POST['id'] );
+		wp_send_json_success();
+	}
+
+	public function ajax_get_scenario_details() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$scenario = ScenarioManager::get( (int)$_POST['id'] );
+
+		if ( $scenario ) wp_send_json_success( $scenario ); // Returns 'steps' inside
+		else wp_send_json_error( [ 'message' => 'Not found' ] );
+	}
+
+	public function ajax_save_scenario_step() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$result = ScenarioManager::save_step( $_POST );
+
+		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+		else wp_send_json_success( [ 'id' => $result ] );
+	}
+
+	public function ajax_save_step_option() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$result = ScenarioManager::save_step_option( $_POST );
+
+		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+		else wp_send_json_success( [ 'id' => $result ] );
+	}
 }
