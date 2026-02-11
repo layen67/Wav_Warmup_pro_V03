@@ -77,6 +77,46 @@ jQuery(document).ready(function($) {
         $('#pw-step-empty-state').hide();
     });
 
+    // Add Step
+    $('#pw-add-step-btn').on('click', function(e) {
+        e.preventDefault();
+        if (!currentScenarioId) return;
+
+        const nextNum = $('#pw-steps-list li').length + 1;
+
+        $.post(pwAdmin.ajaxurl, {
+            action: 'pw_save_scenario_step',
+            nonce: pwAdmin.nonce,
+            scenario_id: currentScenarioId,
+            step_number: nextNum,
+            step_type: 'SEND', // Default
+            delay_minutes: 0
+        }, function(res) {
+            if(res.success) {
+                loadSteps(currentScenarioId);
+            } else {
+                alert('Erreur: ' + (res.data ? res.data.message : 'Inconnue'));
+            }
+        }).fail(function(xhr, status, error) {
+            alert('Erreur serveur lors de la création de l\'étape.');
+        });
+    });
+
+    // Save Step Details
+    $('#pw-save-step').on('click', function(e) {
+        e.preventDefault();
+        const data = $('#pw-step-form').serialize();
+
+        $.post(pwAdmin.ajaxurl, data + '&action=pw_save_scenario_step&nonce=' + pwAdmin.nonce, function(res) {
+            if(res.success) {
+                alert('Étape enregistrée !');
+                loadSteps(currentScenarioId);
+            } else {
+                alert('Erreur: ' + (res.data ? res.data.message : 'Inconnue'));
+            }
+        });
+    });
+
     // Close Modal
     $('.pw-modal-close').on('click', function() {
         $('#pw-scenario-modal').hide();
