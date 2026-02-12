@@ -36,7 +36,9 @@ class LoadBalancer {
             $template = TemplateLoader::load( $template_id_or_name );
 
             if ( $template ) {
-                $timezone = ! empty( $template['timezone'] ) ? $template['timezone'] : 'UTC';
+                // Use Template Timezone or fallback to WP Site Timezone (better for user experience than UTC)
+                $timezone = ! empty( $template['timezone'] ) ? $template['timezone'] : wp_timezone_string();
+                if ( empty( $timezone ) ) $timezone = 'UTC';
 
                 try {
                     $dt = new \DateTime( 'now', new \DateTimeZone( $timezone ) );
