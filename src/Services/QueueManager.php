@@ -17,7 +17,7 @@ class QueueManager {
     /**
      * Ajoute un email à la file d'attente
      */
-    public static function add( $server_id, $to, $from, $subject, $meta = [] ) {
+    public static function add( $server_id, $to, $from, $subject, $meta = [], $scheduled_at = null ) {
         global $wpdb;
         $table = $wpdb->prefix . 'postal_queue';
 
@@ -28,7 +28,7 @@ class QueueManager {
             'from_email'   => $from,
             'subject'      => $subject,
             'status'       => 'pending',
-            'scheduled_at' => current_time( 'mysql' ), // Default: ASAP
+            'scheduled_at' => $scheduled_at ? $scheduled_at : current_time( 'mysql' ),
             'created_at'   => current_time( 'mysql' ),
             'meta'         => json_encode( $meta ),
             'attempts'     => 0,

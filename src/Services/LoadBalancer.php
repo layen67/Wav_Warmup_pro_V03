@@ -8,6 +8,7 @@ use PostalWarmup\Services\Logger;
 use PostalWarmup\Models\Strategy;
 use PostalWarmup\Services\StrategyEngine;
 use PostalWarmup\Admin\ISPManager;
+use PostalWarmup\Services\TemplateLoader;
 
 class LoadBalancer {
 
@@ -29,6 +30,46 @@ class LoadBalancer {
         $ignore_limits = $context['ignore_limits'] ?? false;
         $target_isp = $context['isp'] ?? null;
         $strategy_id = $context['strategy_id'] ?? null;
+
+        // 0. Time Schedule & Timezone Check (Template Level)
+        if ( ! $ignore_limits ) {
+            $template = TemplateLoader::load( $template_id_or_name );
+
+            if ( $template ) {
+                $timezone = ! empty( $template['timezone'] ) ? $template['timezone'] : 'UTC';
+
+                try {
+                    $dt = new \DateTime( 'now', new \DateTimeZone( $timezone ) );
+                    $current_hour = (int) $dt->format( 'G' ); // 0-23
+
+                    // Defaults to 9-18 if not set (Safe Warmup Practice)
+                    $start_hour = isset( $template['allowed_start_hour'] ) ? (int) $template['allowed_start_hour'] : 9;
+                    $end_hour = isset( $template['allowed_end_hour'] ) ? (int) $template['allowed_end_hour'] : 18;
+
+                    $is_allowed = false;
+
+                    if ( $start_hour == $end_hour ) {
+                        // If start == end, assume 24h allowed (or user can disable template)
+                        $is_allowed = true;
+                    } elseif ( $start_hour < $end_hour ) {
+                        // Ex: 9 to 18 (9:00 -> 17:59)
+                        $is_allowed = ( $current_hour >= $start_hour && $current_hour < $end_hour );
+                    } else {
+                        // Ex: 22 to 6 (22:00 -> 05:59)
+                        $is_allowed = ( $current_hour >= $start_hour || $current_hour < $end_hour );
+                    }
+
+                    if ( ! $is_allowed ) {
+                        // Only log if we are blocking
+                        Logger::info( "LoadBalancer: Template '{$template['name']}' restricted by schedule ($start_hour-$end_hour in $timezone, current $current_hour). Skipping." );
+                        return null;
+                    }
+
+                } catch ( \Exception $e ) {
+                    Logger::error( "LoadBalancer: Timezone error - " . $e->getMessage() );
+                }
+            }
+        }
 
         // Auto-resolve Strategy if ISP is provided but Strategy ID is not
         if ( $target_isp && ! $strategy_id ) {

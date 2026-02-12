@@ -5,6 +5,7 @@ namespace PostalWarmup\Services;
 use PostalWarmup\Services\Logger;
 use PostalWarmup\Services\QueueManager;
 use PostalWarmup\Services\ISPDetector;
+use PostalWarmup\Services\TemplateLoader;
 use PostalWarmup\Models\Database;
 
 class ScenarioEngine {
@@ -57,44 +58,41 @@ class ScenarioEngine {
         Logger::info( "ScenarioEngine: Executing Step #{$step->id} ({$step->step_type}) for $email" );
 
         if ( $step->step_type === 'SEND' ) {
-            // Queue the email
-            // Identify target ISP/Server via LoadBalancer logic (handled inside QueueManager usually)
-            // But here we need to pick a server to set sender?
-            // Actually QueueManager::add takes server_id.
-            // We should use LoadBalancer to find best server for this email/scenario context.
+            // Fetch Template Data directly using TemplateLoader (handles JSON parsing & fallbacks)
+            $template_data = TemplateLoader::load( $step->template_id );
 
-            // For now, let QueueManager resolve server later?
-            // QueueManager::add expects a server_id.
-            // Let's use LoadBalancer here to pick initial server.
+            if ( $template_data ) {
+                // Get Random Subject/From Name from variants
+                $subject = TemplateLoader::pick_random( $template_data['subject'] ?? [] );
+                if ( empty( $subject ) ) $subject = 'Hello';
 
-            $isp = ISPDetector::detect( $email );
-            $server = LoadBalancer::select_server( $step->template_id, [ 'isp' => $isp ] );
+                $from_name = TemplateLoader::pick_random( $template_data['from_name'] ?? [] );
+                if ( empty( $from_name ) ) $from_name = 'Contact';
 
-            if ( $server ) {
-                // Get Template Data to find Subject/From
-                // We use a helper or raw query if TemplateLoader isn't static-friendly enough (it is)
-                // Assuming TemplateLoader::load($id) works.
-                // But template_id in step is integer ID. TemplateLoader expects slug/name usually or ID?
-                // Let's assume we can fetch by ID.
-                $tpl = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}postal_templates WHERE id = %d", $step->template_id ) );
+                $prefix = sanitize_title( $from_name ) ?: 'contact';
 
-                if ( $tpl ) {
-                    $data = json_decode( $tpl->data, true );
-                    $subject = $data['subject'][0] ?? 'Hello'; // Simple fallback
-                    $from_name = $data['from_name'][0] ?? 'Contact';
+                // Meta for tracking reply & context
+                $meta = [
+                    'template_id' => $step->template_id,
+                    'scenario_log_id' => $log_id,
+                    'scenario_step_id' => $step->id,
+                    'prefix' => $prefix
+                ];
 
-                    // Meta for tracking reply
-                    $meta = [
-                        'template_id' => $step->template_id,
-                        'scenario_log_id' => $log_id,
-                        'scenario_step_id' => $step->id,
-                        'prefix' => sanitize_title($from_name) // approximate
-                    ];
+                // Add to Queue WITHOUT pre-selecting server.
+                // QueueManager will handle Load Balancing, Time Windows, and Limits.
+                // We pass 0 as server_id and a placeholder domain.
+                // QueueManager::process_queue updates server_id and from_email.
+                $queued_id = QueueManager::add( 0, $email, $prefix . '@pending', $subject, $meta );
 
-                    QueueManager::add( $server['id'], $email, $from_name . '@' . $server['domain'], $subject, $meta );
+                if ( $queued_id ) {
+                    Logger::info( "ScenarioEngine: Queued step #{$step->id} for $email (Queue ID: $queued_id)" );
+                } else {
+                    Logger::error( "ScenarioEngine: Failed to queue step #{$step->id} for $email" );
                 }
+
             } else {
-                Logger::warning( "ScenarioEngine: No server available for step #{$step->id}" );
+                Logger::warning( "ScenarioEngine: Template #{$step->template_id} not found for step #{$step->id}" );
             }
 
         } elseif ( $step->step_type === 'WAIT' ) {

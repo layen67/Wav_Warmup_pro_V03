@@ -37,73 +37,55 @@ class StepExecutor {
         // 2. Detect ISP for Load Balancing
         $isp_key = ISPDetector::detect( $email );
 
-        // 3. Select Server (LoadBalancer V3)
-        $server_data = LoadBalancer::select_server( $template_id, [ 'isp' => $isp_key ] );
-
-        if ( ! $server_data ) {
-            Logger::warning( "StepExecutor: No server available for Step #{$step->id} (ISP: $isp_key). Retrying later." );
-            // Optionally queue without server ID and let Cron resolve it?
-            // Current QueueManager requires server_id.
-            // We can return false and let the caller retry or fail.
-            return false;
-        }
-
-        $server_id = (int) $server_data['id'];
-        $server_domain = $server_data['domain'];
+        // 3. Skip immediate server selection.
+        // Let QueueManager handle server selection, load balancing, and schedule limits at send time.
+        // This prevents dropping the step if limits are currently full or if we are scheduling for later.
+        $server_id = 0;
+        $server_domain = 'pending'; // Placeholder
 
         // 4. Calculate Scheduled Time (Timezone + Allowed Hours)
         $scheduled_at = self::calculate_schedule( $template, $step->delay_minutes );
 
         // 5. Prepare Email Content (Subject/From) from Template Data
         $data = json_decode( $template->data, true );
-        // Randomize variants if multiple
         $subject = self::pick_variant( $data['subject'] ?? [] ) ?: 'Hello';
         $from_name = self::pick_variant( $data['from_name'] ?? [] ) ?: 'Contact';
 
-        // 6. Generate Return-Path (Context)
-        // We need to inject this into the queue item so the Sender uses it.
-        // QueueManager usually constructs the FROM header.
-        // The Return-Path is often set by the mailer (Postal) based on the sender or explicit header.
-        // We will pass it in 'meta'.
+        // 6. Generate Tracking ID (Scenario Context)
+        // We use ScenarioResolver to generate a unique hash for this log/step.
+        // This hash will be used as the email prefix (local part) so replies can be routed back.
         $return_path_local = ScenarioResolver::generate_return_path_local( 'scenario_log', $log_id );
-        $return_path = $return_path_local . '@' . $server_domain;
 
         // 7. Add to Queue
+        // We pass the tracking hash as 'prefix' in meta.
+        // QueueManager will use this prefix when constructing the final From address: prefix@server_domain
         $meta = [
             'scenario_log_id' => $log_id,
             'scenario_step_id' => $step->id,
-            'return_path' => $return_path,
             'template_id' => $template_id,
-            'isp' => $isp_key
+            'isp' => $isp_key,
+            'prefix' => $return_path_local // CRITICAL: This ensures From address matches the tracking ID
         ];
 
-        // QueueManager::add($server_id, $to, $from_email, $subject, $meta, $scheduled_at)
-        // Construct from_email: name <local@domain>? Or just email?
-        // Usually "From Name <random@domain>"
-        // Let's assume standard format: "From Name <{$return_path_local}@{$server_domain}>"
-        // Wait, return-path is for bounces. From address should be clean.
-        // "From: contact@domain". "Return-Path: pw-s1-xyz@domain".
-        // Using return-path as From address (VERP style) is common for tracking replies to unique address.
-        // Prompt says: "ScenarioResolver Identifie... à partir du return-path".
-        // Replies go to the From address or Reply-To.
-        // If the user hits Reply, they reply to the From header (or Reply-To).
-        // Postal Webhook "message.received" captures these.
-        // So we must set the From (or Reply-To) to the unique address.
+        // We use a placeholder From address. QueueManager will update it.
+        $placeholder_email = "$from_name <{$return_path_local}@pending>";
 
-        $unique_email = "{$return_path_local}@{$server_domain}";
-
-        QueueManager::add(
+        $queued_id = QueueManager::add(
             $server_id,
             $email,
-            "$from_name <$unique_email>",
+            $placeholder_email,
             $subject,
             $meta,
             $scheduled_at
         );
 
-        Logger::info( "StepExecutor: Queued Step #{$step->id} for $email on Server {$server_domain} at $scheduled_at" );
-
-        return true;
+        if ( $queued_id ) {
+            Logger::info( "StepExecutor: Queued Step #{$step->id} for $email (Scheduled: $scheduled_at)" );
+            return true;
+        } else {
+            Logger::error( "StepExecutor: Failed to queue Step #{$step->id}" );
+            return false;
+        }
     }
 
     /**
