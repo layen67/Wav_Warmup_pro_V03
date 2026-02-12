@@ -31,6 +31,10 @@ class TemplateManager {
 				];
 
 				$row['default_label'] = $data['default_label'] ?? '';
+				$row['scenario_id'] = $row['scenario_id']; // Ensure it's passed explicitly if needed, though $row has all columns.
+				// JS uses 'scenario_id' from the root object, which is already in $row because we did SELECT *
+				// However, let's verify if $row is modified or rebuilt.
+				// $row is used directly. But wait, we iterate $results as $row.
 				
 				// Map stats
 				$s = $all_stats[$row['name']] ?? [];
