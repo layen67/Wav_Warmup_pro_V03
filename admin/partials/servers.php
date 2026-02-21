@@ -23,13 +23,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $api_url = esc_url_raw($_POST['api_url']);
         $api_key = sanitize_text_field($_POST['api_key']);
         $active = !empty($_POST['active']) ? 1 : 0;
+        // $daily_limit = isset($_POST['daily_limit']) ? (int)$_POST['daily_limit'] : 0; // Deprecated
+        $priority = isset($_POST['priority']) ? (int)$_POST['priority'] : 10;
+        $timezone = sanitize_text_field($_POST['timezone']);
         
         if ($domain && $api_url && $api_key) {
             $result = PW_Database::insert_server(array(
                 'domain' => $domain,
                 'api_url' => $api_url,
                 'api_key' => $api_key,
-                'active' => $active
+                'active' => $active,
+                'daily_limit' => 0, // Force unlimited, controlled by Strategy
+                'priority' => $priority,
+                'timezone' => $timezone
             ));
             
             if ($result) {
@@ -48,11 +54,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $domain = sanitize_text_field($_POST['domain']);
         $api_url = esc_url_raw($_POST['api_url']);
         $active = !empty($_POST['active']) ? 1 : 0;
+        // $daily_limit = isset($_POST['daily_limit']) ? (int)$_POST['daily_limit'] : 0;
+        $priority = isset($_POST['priority']) ? (int)$_POST['priority'] : 10;
+        $timezone = sanitize_text_field($_POST['timezone']);
         
         $data = array(
             'domain' => $domain,
             'api_url' => $api_url,
-            'active' => $active
+            'active' => $active,
+            'daily_limit' => 0, // Deprecated
+            'priority' => $priority,
+            'timezone' => $timezone
         );
         
         // ⭐ SÉCURITÉ : Ne mettre à jour la clé QUE si une nouvelle est fournie
@@ -155,6 +167,39 @@ if ($action === 'delete' && $server_id) {
                             <p class="description">
                                 <?php _e('Clé API serveur Postal (Settings > Credentials)', 'postal-warmup'); ?>
                             </p>
+                        </td>
+                    </tr>
+                    <!-- Deprecated Daily Limit
+                    <tr>
+                        <th scope="row">
+                            <label for="daily_limit"><?php _e('Limite Quotidienne', 'postal-warmup'); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" id="daily_limit" name="daily_limit" class="small-text" value="<?php echo esc_attr($server['daily_limit']); ?>">
+                            <p class="description"><?php _e('0 = Illimité. Emails max par jour.', 'postal-warmup'); ?></p>
+                        </td>
+                    </tr>
+                    -->
+                    <tr>
+                        <th scope="row">
+                            <label for="priority"><?php _e('Priorité', 'postal-warmup'); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" id="priority" name="priority" class="small-text" value="<?php echo esc_attr($server['priority']); ?>">
+                            <p class="description"><?php _e('Plus haut = prioritaire. Défaut : 10.', 'postal-warmup'); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="timezone"><?php _e('Fuseau Horaire', 'postal-warmup'); ?></label>
+                        </th>
+                        <td>
+                            <select id="timezone" name="timezone">
+                                <option value="UTC" <?php selected($server['timezone'], 'UTC'); ?>>UTC</option>
+                                <?php foreach (timezone_identifiers_list() as $tz) {
+                                    echo '<option value="' . esc_attr($tz) . '" ' . selected($server['timezone'], $tz, false) . '>' . esc_html($tz) . '</option>';
+                                } ?>
+                            </select>
                         </td>
                     </tr>
                     <tr>
@@ -329,11 +374,11 @@ if ($action === 'delete' && $server_id) {
                     <thead>
                         <tr>
                             <th><?php _e('Domaine', 'postal-warmup'); ?></th>
-                            <th><?php _e('API URL', 'postal-warmup'); ?></th>
+                            <th><?php _e('Utilisation Jour', 'postal-warmup'); ?></th>
+                            <th><?php _e('Priorité', 'postal-warmup'); ?></th>
                             <th><?php _e('Statut', 'postal-warmup'); ?></th>
-                            <th><?php _e('Envoyés', 'postal-warmup'); ?></th>
+                            <th><?php _e('Total', 'postal-warmup'); ?></th>
                             <th><?php _e('Succès', 'postal-warmup'); ?></th>
-                            <th><?php _e('Taux', 'postal-warmup'); ?></th>
                             <th><?php _e('Actions', 'postal-warmup'); ?></th>
                         </tr>
                     </thead>
@@ -351,6 +396,12 @@ if ($action === 'delete' && $server_id) {
                             } elseif ($success_rate >= 70) {
                                 $badge_class = 'warning';
                             }
+
+                            // Calculate Daily Usage
+                            $daily_used = \PostalWarmup\Models\Stats::get_server_daily_usage($server['id']);
+                            $daily_limit = \PostalWarmup\Models\Stats::get_dynamic_limit($server);
+                            $usage_pct = ($daily_limit > 0) ? round(($daily_used / $daily_limit) * 100) : 0;
+                            $limit_display = ($daily_limit > 0) ? $daily_limit : '∞';
                             
                             $delete_url = wp_nonce_url(
                                 admin_url('admin.php?page=postal-warmup-servers&action=delete&id=' . $server['id']), 
@@ -361,12 +412,13 @@ if ($action === 'delete' && $server_id) {
                             <tr>
                                 <td>
                                     <strong><?php echo esc_html($server['domain']); ?></strong>
+                                    <div style="font-size:11px; color:#666;"><?php echo esc_html($server['timezone'] ?: 'UTC'); ?></div>
                                 </td>
                                 <td>
-                                    <code style="font-size: 11px;">
-                                        <?php echo esc_html($server['api_url']); ?>
-                                    </code>
+                                    <strong><?php echo $daily_used; ?></strong> <small>(Total Aujourd'hui)</small>
+                                    <br><small style="color:#888"><?php _e('Géré par Stratégie/ISP', 'postal-warmup'); ?></small>
                                 </td>
+                                <td><?php echo isset($server['priority']) ? $server['priority'] : 10; ?></td>
                                 <td>
                                     <?php if ($server['active']) { ?>
                                         <span class="pw-badge success">

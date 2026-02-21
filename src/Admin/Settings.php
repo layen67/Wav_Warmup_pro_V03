@@ -20,6 +20,9 @@ class Settings {
 
 		register_setting( 'postal-warmup-settings', 'pw_log_retention_days', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 30 ) );
 		add_settings_field( 'pw_log_retention_days', __( 'Rétention des logs (jours)', 'postal-warmup' ), array( $this, 'log_retention_field' ), 'postal-warmup-settings', 'pw_logs_section' );
+
+		register_setting( 'postal-warmup-settings', 'pw_queue_retention_days', array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 7 ) );
+		add_settings_field( 'pw_queue_retention_days', __( 'Rétention de la file d\'attente (jours)', 'postal-warmup' ), array( $this, 'queue_retention_field' ), 'postal-warmup-settings', 'pw_logs_section' );
 		
 		// === Section Statistiques ===
 		add_settings_section( 'pw_stats_section', __( 'Statistiques', 'postal-warmup' ), array( $this, 'stats_section_callback' ), 'postal-warmup-settings' );
@@ -79,6 +82,11 @@ class Settings {
 	public function log_retention_field() {
 		$value = get_option( 'pw_log_retention_days', 30 );
 		echo '<input type="number" name="pw_log_retention_days" value="' . esc_attr( $value ) . '" class="small-text"> ' . __( 'jours', 'postal-warmup' );
+	}
+
+	public function queue_retention_field() {
+		$value = get_option( 'pw_queue_retention_days', 7 );
+		echo '<input type="number" name="pw_queue_retention_days" value="' . esc_attr( $value ) . '" class="small-text"> ' . __( 'jours (Messages envoyés/échoués uniquement)', 'postal-warmup' );
 	}
 	public function stats_enabled_field() {
 		$value = get_option( 'pw_stats_enabled', true );

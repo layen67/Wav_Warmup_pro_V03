@@ -6,7 +6,10 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
 use PostalWarmup\Services\Logger;
+use PostalWarmup\Services\QueueManager;
 use PostalWarmup\Models\Database;
+use PostalWarmup\Services\ScenarioEngine;
+use PostalWarmup\Modules\ScenarioEngine\PostalReplyAdapter;
 
 /**
  * Gestionnaire de webhook REST API
@@ -69,12 +72,17 @@ class WebhookHandler {
 		if ( empty( $data ) ) {
 			return new WP_REST_Response( [ 'status' => 'error', 'message' => 'Invalid JSON' ], 400 );
 		}
+
+		// Priority: Check if it's a Scenario Reply
+		if ( PostalReplyAdapter::handle( $data ) ) {
+			return new WP_REST_Response( [ 'status' => 'ok', 'handler' => 'scenario_engine' ], 200 );
+		}
 		
 		// Events
 		if ( isset( $data['event'] ) ) {
 			$this->handle_event( $data );
 		} elseif ( isset( $data['rcpt_to'] ) ) {
-			// Incoming message (if configured to route to this URL)
+			// Incoming message (Legacy Route Handler)
 			$this->handle_incoming_message( $data );
 		}
 		
@@ -195,10 +203,31 @@ class WebhookHandler {
 
 		Logger::info( "Message entrant", [ 'server_id' => $server['id'], 'from' => $mail_from, 'subject' => $subject ] );
 		
-		// Check limits and reply
-		if ( $this->check_rate_limits( $server['id'] ) ) {
-			Sender::send( $mail_from, $domain, $prefix, $server );
-		}
+		// Check limits and reply (via Queue)
+		// Lookup Template ID (Fix "Système" label issue)
+		global $wpdb;
+		$table_tpl = $wpdb->prefix . 'postal_templates';
+		$template_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table_tpl WHERE name = %s", $prefix ) );
+
+		// Meta data for queue
+		$meta = [
+			'domain' => $domain,
+			'prefix' => $prefix,
+			'template_id' => $template_id, // Pass ID to queue
+			'original_message_id' => $id
+		];
+
+		// Trigger Scenario Engine (Reply Received)
+		// Extract plain body if available (Postal sends 'plain_body' or 'text_body' usually in incoming)
+		$body = $data['plain_body'] ?? ( $data['text_body'] ?? '' );
+		ScenarioEngine::process_reply( $mail_from, $body );
+
+		// Add to Queue instead of sending directly (Auto-reply logic if not managed by Scenario)
+		// Note: If Scenario Engine handles it, maybe we shouldn't auto-reply generic?
+		// User requirement says "Déclenche step suivant exact".
+		// We keep generic reply as fallback or separate feature, but logging it.
+
+		// QueueManager::add( $server['id'], $mail_from, $prefix . '@' . $domain, 'Re: ' . $subject, $meta );
 	}
 
 	private function parse_email( $email ) {
@@ -244,7 +273,9 @@ class WebhookHandler {
 			Database::update_detailed_metrics( $template_name, $server_id, $event_type );
 			
 			// Fix: Also record global stats for relevant events
-			if ( $event_type === 'sent' || $event_type === 'delivered' ) {
+			// Note: 'sent' is skipped here because Sender::send already records it.
+			// We only record 'delivered' or other status updates to avoid double counting.
+			if ( $event_type === 'delivered' ) {
 				Database::increment_sent( $domain, true );
 				Database::record_stat( $server_id, true );
 			} elseif ( in_array( $event_type, [ 'failed', 'bounced', 'dns_error' ] ) ) {

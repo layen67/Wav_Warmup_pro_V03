@@ -23,8 +23,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Constantes
-define( 'PW_VERSION', '3.2.1' );
-define( 'WARMUP_PRO_VERSION', '3.2.1' ); // Alias for script versioning
+define( 'PW_VERSION', '3.3.0' );
+define( 'WARMUP_PRO_VERSION', '3.3.0' ); // Alias for script versioning
 define( 'PW_PLUGIN_FILE', __FILE__ );
 define( 'PW_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PW_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

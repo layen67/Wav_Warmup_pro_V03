@@ -48,12 +48,16 @@ class Activator {
 			api_url varchar(255) NOT NULL,
 			api_key varchar(255) NOT NULL,
 			active tinyint(1) DEFAULT 1 NOT NULL,
+			daily_limit int DEFAULT 0 NOT NULL,
+			priority int DEFAULT 10 NOT NULL,
+			timezone varchar(50) DEFAULT 'UTC',
+			warmup_day int DEFAULT 1,
 			sent_count int DEFAULT 0 NOT NULL,
 			success_count int DEFAULT 0 NOT NULL,
 			error_count int DEFAULT 0 NOT NULL,
 			last_used datetime DEFAULT NULL,
-			created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
-			updated_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY domain (domain),
 			KEY idx_active (active)
@@ -73,7 +77,7 @@ class Activator {
 			template_used varchar(100) DEFAULT NULL,
 			status varchar(50) DEFAULT NULL,
 			response_time decimal(10,3) DEFAULT NULL,
-			created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
 			KEY idx_server_id (server_id),
 			KEY idx_level (level),
@@ -95,7 +99,7 @@ class Activator {
 			success_count int DEFAULT 0 NOT NULL,
 			error_count int DEFAULT 0 NOT NULL,
 			avg_response_time decimal(10,3) DEFAULT NULL,
-			created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY unique_stat (server_id, date, hour),
 			KEY idx_date (date),
@@ -113,7 +117,7 @@ class Activator {
 			page_url varchar(500) DEFAULT NULL,
 			user_agent text DEFAULT NULL,
 			ip_address varchar(45) DEFAULT NULL,
-			clicked_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			clicked_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
 			KEY idx_template (template),
 			KEY idx_clicked_at (clicked_at)
@@ -128,19 +132,24 @@ class Activator {
 			data longtext NOT NULL,
 			folder_id bigint DEFAULT NULL,
 			status varchar(20) DEFAULT 'active',
+			timezone varchar(50) DEFAULT NULL,
+			allowed_start_hour tinyint DEFAULT 9,
+			allowed_end_hour tinyint DEFAULT 18,
+			scenario_id bigint DEFAULT NULL,
 			is_favorite tinyint(1) DEFAULT 0,
 			tags text DEFAULT NULL,
 			stats_cache longtext DEFAULT NULL,
 			last_used_at datetime DEFAULT NULL,
 			usage_count int DEFAULT 0,
 			menu_order int DEFAULT 0,
-			created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
-			updated_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			created_by bigint DEFAULT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY name (name),
 			KEY idx_folder (folder_id),
-			KEY idx_status (status)
+			KEY idx_status (status),
+			KEY idx_scenario (scenario_id)
 		) $charset_collate;";
 		dbDelta( $sql_templates );
 
@@ -153,7 +162,7 @@ class Activator {
 			color varchar(7) DEFAULT '#2271b1',
 			icon varchar(50) DEFAULT 'folder',
 			menu_order int DEFAULT 0,
-			created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
 			KEY idx_parent (parent_id)
 		) $charset_collate;";
@@ -166,7 +175,7 @@ class Activator {
 			name varchar(50) NOT NULL,
 			color varchar(7) DEFAULT '#646970',
 			usage_count int DEFAULT 0,
-			created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY name (name)
 		) $charset_collate;";
@@ -190,7 +199,7 @@ class Activator {
 			version_number int NOT NULL,
 			comment text DEFAULT NULL,
 			diff_summary text DEFAULT NULL,
-			created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			created_by bigint NOT NULL,
 			PRIMARY KEY  (id),
 			KEY idx_template (template_id)
@@ -206,7 +215,7 @@ class Activator {
 			event_type varchar(50) NOT NULL,
 			count int DEFAULT 1,
 			date date NOT NULL,
-			created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY unique_metric (template_id, server_id, event_type, date),
 			KEY idx_template (template_id),
@@ -225,7 +234,7 @@ class Activator {
 			total_success int DEFAULT 0 NOT NULL,
 			total_error int DEFAULT 0 NOT NULL,
 			avg_response_time decimal(10,3) DEFAULT NULL,
-			updated_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY unique_daily (server_id, date),
 			KEY idx_date (date)
@@ -243,7 +252,7 @@ class Activator {
 			event_type varchar(50) NOT NULL,
 			timestamp datetime NOT NULL,
 			meta longtext DEFAULT NULL,
-			created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
 			KEY idx_server_id (server_id),
 			KEY idx_template_id (template_id),
@@ -254,6 +263,150 @@ class Activator {
 			KEY idx_composite_stats (server_id, template_id, event_type, timestamp)
 		) $charset_collate;";
 		dbDelta( $sql_stats_history );
+
+		// 13. Queue System
+		$table_queue = $wpdb->prefix . 'postal_queue';
+		$sql_queue = "CREATE TABLE $table_queue (
+			id bigint NOT NULL AUTO_INCREMENT,
+			server_id int NOT NULL,
+			template_id bigint DEFAULT NULL,
+			strategy_id bigint DEFAULT NULL,
+			warmup_day int DEFAULT 1,
+			to_email varchar(255) NOT NULL,
+			from_email varchar(255) NOT NULL,
+			subject text NOT NULL,
+			status varchar(50) DEFAULT 'pending',
+			scheduled_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			attempts int DEFAULT 0,
+			meta longtext DEFAULT NULL,
+			error_message text DEFAULT NULL,
+			isp varchar(50) DEFAULT 'Other',
+			PRIMARY KEY  (id),
+			KEY idx_status (status),
+			KEY idx_scheduled (scheduled_at),
+			KEY idx_server (server_id),
+			KEY idx_isp (isp),
+			KEY idx_strategy (strategy_id)
+		) $charset_collate;";
+		dbDelta( $sql_queue );
+
+		// 14. Custom ISPs (Refonte Profils)
+		$table_isps = $wpdb->prefix . 'postal_isps';
+		$sql_isps = "CREATE TABLE $table_isps (
+			id bigint NOT NULL AUTO_INCREMENT,
+			isp_key varchar(50) NOT NULL,
+			isp_label varchar(100) NOT NULL,
+			domains longtext NOT NULL,
+			max_daily int DEFAULT 0,
+			max_hourly int DEFAULT 0,
+			strategy varchar(50) DEFAULT 'slow_rise',
+			strategy_id bigint DEFAULT NULL,
+			override_start_volume int DEFAULT NULL,
+			override_growth_value float DEFAULT NULL,
+			override_growth_type varchar(20) DEFAULT NULL,
+			override_max_volume int DEFAULT NULL,
+			active tinyint(1) DEFAULT 1,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY isp_key (isp_key),
+			KEY idx_strategy (strategy_id)
+		) $charset_collate;";
+		dbDelta( $sql_isps );
+
+		// 15. Server ISP Stats (Réputation & Perf)
+		$table_server_isp = $wpdb->prefix . 'postal_server_isp_stats';
+		$sql_server_isp = "CREATE TABLE $table_server_isp (
+			id bigint NOT NULL AUTO_INCREMENT,
+			server_id int NOT NULL,
+			isp_key varchar(50) NOT NULL,
+			score int DEFAULT 100,
+			warmup_day int DEFAULT 1,
+			sent_today int DEFAULT 0,
+			delivered_today int DEFAULT 0,
+			fails_today int DEFAULT 0,
+			last_updated datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			UNIQUE KEY unique_stat (server_id, isp_key),
+			KEY idx_server (server_id),
+			KEY idx_isp (isp_key)
+		) $charset_collate;";
+		dbDelta( $sql_server_isp );
+
+		// 16. Strategies
+		$table_strategies = $wpdb->prefix . 'postal_strategies';
+		$sql_strategies = "CREATE TABLE $table_strategies (
+			id bigint NOT NULL AUTO_INCREMENT,
+			name varchar(100) NOT NULL,
+			description text DEFAULT NULL,
+			config_json longtext NOT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			UNIQUE KEY name (name)
+		) $charset_collate;";
+		dbDelta( $sql_strategies );
+
+		// 17. Scenarios
+		$table_scenarios = $wpdb->prefix . 'postal_scenarios';
+		$sql_scenarios = "CREATE TABLE $table_scenarios (
+			id bigint NOT NULL AUTO_INCREMENT,
+			name varchar(255) NOT NULL,
+			description text DEFAULT NULL,
+			status enum('active', 'inactive') DEFAULT 'active',
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id)
+		) $charset_collate;";
+		dbDelta( $sql_scenarios );
+
+		// 18. Scenario Steps
+		$table_scenario_steps = $wpdb->prefix . 'postal_scenario_steps';
+		$sql_scenario_steps = "CREATE TABLE $table_scenario_steps (
+			id bigint NOT NULL AUTO_INCREMENT,
+			scenario_id bigint NOT NULL,
+			step_number int NOT NULL,
+			template_id bigint DEFAULT NULL,
+			step_type enum('SEND', 'WAIT', 'BRANCH', 'JUMP_STEP') DEFAULT 'SEND',
+			delay_minutes int DEFAULT 0,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			PRIMARY KEY  (id),
+			KEY idx_scenario (scenario_id),
+			KEY idx_order (scenario_id, step_number)
+		) $charset_collate;";
+		dbDelta( $sql_scenario_steps );
+
+		// 19. Scenario Step Options (Conditions/Replies)
+		$table_scenario_step_options = $wpdb->prefix . 'postal_scenario_step_options';
+		$sql_scenario_step_options = "CREATE TABLE $table_scenario_step_options (
+			id bigint NOT NULL AUTO_INCREMENT,
+			step_id bigint NOT NULL,
+			reply_keyword varchar(100) DEFAULT NULL,
+			next_step_id bigint DEFAULT NULL,
+			action enum('CONTINUE', 'STOP_FLOW', 'JUMP_SCENARIO') DEFAULT 'CONTINUE',
+			target_scenario_id bigint DEFAULT NULL,
+			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			PRIMARY KEY  (id),
+			KEY idx_step (step_id)
+		) $charset_collate;";
+		dbDelta( $sql_scenario_step_options );
+
+		// 20. Scenario Logs (Tracking)
+		$table_scenario_logs = $wpdb->prefix . 'postal_scenario_logs';
+		$sql_scenario_logs = "CREATE TABLE $table_scenario_logs (
+			id bigint NOT NULL AUTO_INCREMENT,
+			scenario_id bigint NOT NULL,
+			email varchar(255) NOT NULL,
+			current_step_id bigint DEFAULT NULL,
+			status enum('pending', 'active', 'completed', 'stopped') DEFAULT 'active',
+			last_activity datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			meta longtext DEFAULT NULL,
+			PRIMARY KEY  (id),
+			KEY idx_email (email),
+			KEY idx_status (status)
+		) $charset_collate;";
+		dbDelta( $sql_scenario_logs );
 	}
 
 	private static function set_default_options() {
@@ -269,6 +422,56 @@ class Activator {
 		add_option( 'pw_log_retention_days', 30 );
 		add_option( 'pw_stats_enabled', true );
 		add_option( 'pw_max_retries', 3 );
+
+		self::install_default_isps();
+	}
+
+	private static function install_default_isps() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_isps';
+
+		if ( $wpdb->get_var("SELECT COUNT(*) FROM $table") > 0 ) {
+			return;
+		}
+
+		$defaults = [
+			[
+				'isp_key' => 'gmail',
+				'isp_label' => 'Google / Gmail',
+				'domains' => "gmail.com\ngooglemail.com",
+				'max_daily' => 500,
+				'max_hourly' => 50,
+				'strategy' => 'slow_rise'
+			],
+			[
+				'isp_key' => 'outlook',
+				'isp_label' => 'Microsoft (Outlook/Hotmail)',
+				'domains' => "outlook.com\nhotmail.com\nlive.com\nmsn.com",
+				'max_daily' => 500,
+				'max_hourly' => 50,
+				'strategy' => 'slow_rise'
+			],
+			[
+				'isp_key' => 'yahoo',
+				'isp_label' => 'Yahoo / AOL',
+				'domains' => "yahoo.com\nymail.com\naol.com",
+				'max_daily' => 1000,
+				'max_hourly' => 100,
+				'strategy' => 'standard'
+			],
+			[
+				'isp_key' => 'orange',
+				'isp_label' => 'Orange / Wanadoo',
+				'domains' => "orange.fr\nwanadoo.fr",
+				'max_daily' => 200,
+				'max_hourly' => 20,
+				'strategy' => 'conservative'
+			]
+		];
+
+		foreach ($defaults as $isp) {
+			$wpdb->insert($table, $isp);
+		}
 	}
 
 	private static function schedule_cron_jobs() {

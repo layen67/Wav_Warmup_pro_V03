@@ -57,6 +57,37 @@ if (!defined('ABSPATH')) exit;
                                 <option value="test">🔵 Test</option>
                             </select>
                         </div>
+                        <div class="pw-form-group">
+                            <label for="pw-editor-timezone">Fuseau Horaire</label>
+                            <select id="pw-editor-timezone" name="timezone" class="large-text">
+                                <option value="">Par défaut (Aucun)</option>
+                                <?php foreach (timezone_identifiers_list() as $tz) {
+                                    echo '<option value="' . esc_attr($tz) . '">' . esc_html($tz) . '</option>';
+                                } ?>
+                            </select>
+                            <p class="description">Fuseau de référence pour les plages horaires.</p>
+                        </div>
+                    </div>
+
+                    <div class="pw-form-row">
+                        <div class="pw-form-group">
+                            <label for="pw-editor-start-hour">Heure de début (0-23)</label>
+                            <input type="number" id="pw-editor-start-hour" name="allowed_start_hour" class="small-text" min="0" max="23" value="9">
+                        </div>
+                        <div class="pw-form-group">
+                            <label for="pw-editor-end-hour">Heure de fin (0-23)</label>
+                            <input type="number" id="pw-editor-end-hour" name="allowed_end_hour" class="small-text" min="0" max="23" value="18">
+                        </div>
+                        <div class="pw-form-group" style="flex:2;">
+                            <label for="pw-editor-scenario">Scénario associé</label>
+                            <select id="pw-editor-scenario" name="scenario_id" class="large-text">
+                                <option value="">Aucun (Warmup standard)</option>
+                                <?php if (!empty($scenarios)): foreach ($scenarios as $scn): ?>
+                                    <option value="<?php echo $scn->id; ?>"><?php echo esc_html($scn->name); ?></option>
+                                <?php endforeach; endif; ?>
+                            </select>
+                            <p class="description">Lier ce template à une étape de scénario.</p>
+                        </div>
                     </div>
                     
                     <div class="pw-form-group">

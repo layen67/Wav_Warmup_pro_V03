@@ -93,7 +93,11 @@ class AjaxHandler {
 			'id'        => (int) ( $_POST['id'] ?? 0 ),
 			'folder_id' => (int) ( $_POST['folder_id'] ?? 0 ),
 			'status'    => sanitize_text_field( $_POST['status'] ?? 'active' ),
-			'tags'      => array_map( 'sanitize_text_field', explode( ',', $_POST['tags'] ?? '' ) )
+			'tags'      => array_map( 'sanitize_text_field', explode( ',', $_POST['tags'] ?? '' ) ),
+			'timezone'  => sanitize_text_field( $_POST['timezone'] ?? '' ),
+			'allowed_start_hour' => (int) ( $_POST['allowed_start_hour'] ?? 9 ),
+			'allowed_end_hour'   => (int) ( $_POST['allowed_end_hour'] ?? 18 ),
+			'scenario_id'        => (int) ( $_POST['scenario_id'] ?? 0 )
 		];
 		
 		$result = TemplateManager::save_template( $name, $data, $meta );
@@ -385,5 +389,103 @@ class AjaxHandler {
 		$stats = Stats::get_server_detail_breakdown( $server_id, $days );
 		
 		wp_send_json_success( [ 'stats' => $stats ] );
+	}
+
+	public function ajax_process_queue_manual() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		\PostalWarmup\Services\QueueManager::process_queue();
+
+		wp_send_json_success( [ 'message' => 'File d\'attente traitée' ] );
+	}
+
+	public function ajax_save_isp() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		// Map $_POST to ISPManager::save expected format
+		// Note: The form sends 'isp_label', 'domains' (string), etc.
+
+		$result = ISPManager::save( $_POST );
+
+		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+		else wp_send_json_success( [ 'id' => $result ] );
+	}
+
+	public function ajax_delete_isp() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		ISPManager::delete( (int)$_POST['id'] );
+		wp_send_json_success();
+	}
+
+	public function ajax_save_strategy() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$result = StrategyManager::save( $_POST );
+
+		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+		else wp_send_json_success( [ 'id' => $result ] );
+	}
+
+	public function ajax_delete_strategy() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		StrategyManager::delete( (int)$_POST['id'] );
+		wp_send_json_success();
+	}
+
+	// --- Scenario Engine AJAX ---
+
+	public function ajax_save_scenario() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$result = ScenarioManager::save( $_POST );
+
+		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+		else wp_send_json_success( [ 'id' => $result ] );
+	}
+
+	public function ajax_delete_scenario() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		ScenarioManager::delete( (int)$_POST['id'] );
+		wp_send_json_success();
+	}
+
+	public function ajax_get_scenario_details() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$scenario = ScenarioManager::get( (int)$_POST['id'] );
+
+		if ( $scenario ) wp_send_json_success( $scenario ); // Returns 'steps' inside
+		else wp_send_json_error( [ 'message' => 'Not found' ] );
+	}
+
+	public function ajax_save_scenario_step() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$result = ScenarioManager::save_step( $_POST );
+
+		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+		else wp_send_json_success( [ 'id' => $result ] );
+	}
+
+	public function ajax_save_step_option() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$result = ScenarioManager::save_step_option( $_POST );
+
+		if ( is_wp_error( $result ) ) wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+		else wp_send_json_success( [ 'id' => $result ] );
 	}
 }

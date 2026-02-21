@@ -10,21 +10,30 @@ use PostalWarmup\Models\Database;
  */
 class TemplateLoader {
 
-	public static function load( $name, $domain = null ) {
+	public static function load( $id_or_name, $domain = null ) {
 		// Check DB first (v3 feature)
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_templates';
 		
-		$db_template = $wpdb->get_row( $wpdb->prepare( "SELECT id, data, folder_id, status, tags FROM $table WHERE name = %s", $name ), ARRAY_A );
+		if ( is_numeric( $id_or_name ) ) {
+			$db_template = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d", $id_or_name ), ARRAY_A );
+		} else {
+			$db_template = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE name = %s", $id_or_name ), ARRAY_A );
+		}
 		
 		if ( $db_template ) {
 			$data = json_decode( $db_template['data'], true );
 			if ( json_last_error() === JSON_ERROR_NONE ) {
 				// Inject meta data for Admin usage
 				$data['id'] = $db_template['id'];
-				$data['name'] = $name; // Ensure name is present
+				$data['name'] = $db_template['name'];
 				$data['folder_id'] = $db_template['folder_id'];
 				$data['status'] = $db_template['status'];
+				$data['timezone'] = $db_template['timezone'];
+				$data['allowed_start_hour'] = $db_template['allowed_start_hour'];
+				$data['allowed_end_hour'] = $db_template['allowed_end_hour'];
+				$data['scenario_id'] = $db_template['scenario_id'];
+
 				// Handle legacy tags format (string vs array)
 				// If tags in DB column (new format) use them, otherwise check JSON
 				if ( ! empty( $db_template['tags'] ) ) {
@@ -35,15 +44,15 @@ class TemplateLoader {
 			}
 		}
 
-		// Fallback to JSON files
-		if ( defined( 'PW_TEMPLATES_DIR' ) ) {
-			$file = PW_TEMPLATES_DIR . $name . '.json';
+		// Fallback to JSON files (Only if name is string)
+		if ( ! is_numeric( $id_or_name ) && defined( 'PW_TEMPLATES_DIR' ) ) {
+			$file = PW_TEMPLATES_DIR . $id_or_name . '.json';
 			if ( file_exists( $file ) ) {
 				$content = file_get_contents( $file );
 				$data = json_decode( $content, true );
 				if ( json_last_error() === JSON_ERROR_NONE ) {
-					if (!isset($data['name'])) {
-						$data['name'] = $name;
+					if ( ! isset( $data['name'] ) ) {
+						$data['name'] = $id_or_name;
 					}
 					return $data;
 				}

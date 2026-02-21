@@ -6,6 +6,135 @@ use PostalWarmup\Models\Database;
 
 class Stats {
 
+	/**
+	 * Récupère le nombre d'emails envoyés aujourd'hui par un serveur.
+	 * Utilisé pour le Load Balancer.
+	 */
+	public static function get_server_daily_usage( int $server_id ) {
+		global $wpdb;
+		$stats_table = $wpdb->prefix . 'postal_stats';
+		$date = current_time( 'Y-m-d' );
+
+		return (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT SUM(sent_count) FROM $stats_table WHERE server_id = %d AND date = %s",
+			$server_id,
+			$date
+		) );
+	}
+
+	public static function get_server_hourly_usage( int $server_id ) {
+		global $wpdb;
+		$stats_table = $wpdb->prefix . 'postal_stats';
+		$date = current_time( 'Y-m-d' );
+		$hour = (int) current_time( 'H' );
+
+		return (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT sent_count FROM $stats_table WHERE server_id = %d AND date = %s AND hour = %d",
+			$server_id,
+			$date,
+			$hour
+		) );
+	}
+
+	public static function get_isp_daily_usage( string $isp ) {
+		global $wpdb;
+		// Check postal_queue which has 'isp' column and status='sent'/'processing'
+		$queue_table = $wpdb->prefix . 'postal_queue';
+		$date_start = current_time( 'Y-m-d 00:00:00' );
+
+		return (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM $queue_table WHERE isp = %s AND status IN ('sent', 'processing') AND updated_at >= %s",
+			$isp,
+			$date_start
+		) );
+	}
+
+    public static function get_isp_hourly_usage( string $isp ) {
+        global $wpdb;
+        $queue_table = $wpdb->prefix . 'postal_queue';
+        $hour_start = current_time( 'Y-m-d H:00:00' );
+
+        return (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM $queue_table WHERE isp = %s AND status IN ('sent', 'processing') AND updated_at >= %s",
+            $isp,
+            $hour_start
+        ) );
+    }
+
+	public static function get_server_isp_daily_usage( int $server_id, string $isp ) {
+		// New V3 Logic: Use dedicated tracking table for speed and persistence
+		$stats = self::get_server_isp_stats( $server_id, $isp );
+		return $stats ? (int) $stats->sent_today : 0;
+	}
+
+	public static function get_server_isp_stats( int $server_id, string $isp_key ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_server_isp_stats';
+
+		$row = $wpdb->get_row( $wpdb->prepare(
+			"SELECT * FROM $table WHERE server_id = %d AND isp_key = %s",
+			$server_id,
+			$isp_key
+		) );
+
+		if ( ! $row ) {
+			// Initialize if missing
+			$wpdb->insert( $table, [
+				'server_id' => $server_id,
+				'isp_key' => $isp_key,
+				'warmup_day' => 1,
+				'sent_today' => 0,
+				'score' => 100
+			] );
+			return (object) [
+				'warmup_day' => 1,
+				'sent_today' => 0,
+				'score' => 100,
+				'fails_today' => 0
+			];
+		}
+
+		return $row;
+	}
+
+	public static function increment_server_isp_usage( int $server_id, string $isp_key, $success = true ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_server_isp_stats';
+
+		// Ensure row exists
+		self::get_server_isp_stats($server_id, $isp_key);
+
+		$sql = "UPDATE $table SET sent_today = sent_today + 1, last_updated = NOW()";
+		if ( $success ) {
+			$sql .= ", delivered_today = delivered_today + 1";
+		} else {
+			$sql .= ", fails_today = fails_today + 1";
+			// Penalize score on failure
+			$sql .= ", score = GREATEST(0, score - 5)";
+		}
+		$sql .= " WHERE server_id = %d AND isp_key = %s";
+
+		$wpdb->query( $wpdb->prepare( $sql, $server_id, $isp_key ) );
+	}
+
+	public static function get_dynamic_limit( $server ) {
+		$limit = (int) $server['daily_limit'];
+
+		if ( $limit <= 0 ) {
+			$settings = get_option('pw_warmup_settings', []);
+			$start_vol = isset($settings['start_volume']) ? (int)$settings['start_volume'] : 10;
+			$growth = isset($settings['growth_rate']) ? (int)$settings['growth_rate'] : 20;
+
+			$day = isset($server['warmup_day']) ? (int)$server['warmup_day'] : 1;
+			if ($day < 1) $day = 1;
+
+			// Limit = Start * (1 + Growth/100)^(Day-1)
+			$limit = floor( $start_vol * pow( 1 + ($growth / 100), $day - 1 ) );
+		}
+
+		return $limit;
+	}
+
 	public static function get_dashboard_stats() {
 		// Try cache first
 		$cached = get_transient( 'pw_dashboard_stats' );
@@ -472,6 +601,17 @@ class Stats {
 		";
 		
 		return $wpdb->get_results( $wpdb->prepare( $sql, $date_from, $today, $today ), ARRAY_A ) ?: [];
+	}
+
+	public static function increment_warmup_day() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_servers';
+		// Only increment for active servers
+		$wpdb->query( "UPDATE $table SET warmup_day = warmup_day + 1 WHERE active = 1" );
+
+		// V3: Increment ISP specific warmup days and reset daily counters
+		$table_isp = $wpdb->prefix . 'postal_server_isp_stats';
+		$wpdb->query( "UPDATE $table_isp SET warmup_day = warmup_day + 1, sent_today = 0, delivered_today = 0, fails_today = 0" );
 	}
 
 	public static function aggregate_daily_stats() {

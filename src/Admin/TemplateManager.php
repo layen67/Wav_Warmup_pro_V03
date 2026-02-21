@@ -29,6 +29,12 @@ class TemplateManager {
 					'text'    => count( $data['text'] ?? [] ),
 					'html'    => count( $data['html'] ?? [] )
 				];
+
+				$row['default_label'] = $data['default_label'] ?? '';
+				$row['scenario_id'] = $row['scenario_id']; // Ensure it's passed explicitly if needed, though $row has all columns.
+				// JS uses 'scenario_id' from the root object, which is already in $row because we did SELECT *
+				// However, let's verify if $row is modified or rebuilt.
+				// $row is used directly. But wait, we iterate $results as $row.
 				
 				// Map stats
 				$s = $all_stats[$row['name']] ?? [];
@@ -169,6 +175,10 @@ class TemplateManager {
 			'folder_id'  => $meta['folder_id'],
 			'status'     => $meta['status'],
 			'tags'       => implode( ',', $meta['tags'] ),
+			'timezone'   => $meta['timezone'] ?? null,
+			'allowed_start_hour' => isset($meta['allowed_start_hour']) ? (int)$meta['allowed_start_hour'] : 9,
+			'allowed_end_hour'   => isset($meta['allowed_end_hour']) ? (int)$meta['allowed_end_hour'] : 18,
+			'scenario_id'        => !empty($meta['scenario_id']) ? (int)$meta['scenario_id'] : null,
 			'updated_at' => current_time( 'mysql' )
 		];
 

@@ -18,6 +18,11 @@ $uncategorized_id = PW_Template_Manager::ensure_uncategorized_folder();
 $tags = PW_Template_Manager::get_all_tags(); 
 $stats_global = PW_Stats::get_templates_global_stats(); 
 
+// Récupérer les scénarios pour le sélecteur
+global $wpdb;
+$table_scenarios = $wpdb->prefix . 'postal_scenarios';
+$scenarios = $wpdb->get_results("SELECT id, name FROM $table_scenarios WHERE status = 'active' ORDER BY name ASC");
+
 // === DEBUG MODE ===
 $debug_mode = defined('WP_DEBUG') && WP_DEBUG; 
 
@@ -374,7 +379,16 @@ if (!$table_exists): ?>
                             </div> 
                              
                             <div class="pw-card-title-group"> 
-                                <h4 class="pw-card-title"><?php echo esc_html($tpl['name']); ?></h4> 
+                                <div>
+                                    <h4 class="pw-card-title"><?php echo esc_html($tpl['name']); ?></h4>
+                                    <?php if (!empty($tpl['timezone'])): ?>
+                                        <div class="pw-template-clock" data-timezone="<?php echo esc_attr($tpl['timezone']); ?>" style="font-size: 11px; color: #666; display: flex; align-items: center; gap: 3px; margin-top: 2px;">
+                                            <span class="dashicons dashicons-clock" style="font-size: 12px; width: 12px; height: 12px;"></span>
+                                            <span class="pw-clock-time">--:--</span>
+                                            <span style="opacity: 0.7;">(<?php echo esc_html($tpl['timezone']); ?>)</span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
                                  
                                 <div class="pw-card-badges"> 
                                     <?php if ($tpl['name'] === 'null'): ?>
@@ -461,8 +475,8 @@ if (!$table_exists): ?>
                                         <label>Libellé</label>
                                         <input 
                                             type="text" 
-                                            class="pw-shortcode-label-input" 
-                                            value="Nous contacter" 
+                                            class="pw-default-label-input"
+                                            value="<?php echo !empty($tpl['default_label']) ? esc_attr($tpl['default_label']) : 'Nous contacter'; ?>"
                                             placeholder="Ex: Contactez-nous"
                                         >
                                     </div>

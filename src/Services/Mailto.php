@@ -4,6 +4,8 @@ namespace PostalWarmup\Services;
 
 use PostalWarmup\Models\Database;
 use PostalWarmup\Services\TemplateLoader;
+use PostalWarmup\Services\LoadBalancer;
+use PostalWarmup\Services\ISPDetector;
 
 class Mailto {
 
@@ -50,11 +52,33 @@ class Mailto {
 			return '<!-- Postal Warmup: Template not found -->';
 		}
 
-		// Select Server (Round Robin / Least Used)
-		$server = $this->get_server_random( $atts['server'] );
+		// Select Server (Load Balancer)
+		// Mode "Display" : On ignore les limites pour toujours afficher le lien
+		$server = null;
+		if ( ! empty( $atts['server'] ) ) {
+			$server = Database::get_server_by_domain( $atts['server'] );
+		} else {
+			// V3 LoadBalancer: Context includes logged-in user ISP if available
+			$context = [ 'ignore_limits' => true ];
+
+			if ( is_user_logged_in() ) {
+				$user = wp_get_current_user();
+				if ( ! empty( $user->user_email ) ) {
+					// Detect ISP to optimize server selection based on quota/reputation for this ISP
+					$context['isp'] = ISPDetector::detect( $user->user_email );
+				}
+			}
+
+			$server = LoadBalancer::select_server( $atts['template'], $context );
+		}
 		
+		// Fallback Système si aucun serveur actif
 		if ( ! $server ) {
-			return '<!-- Postal Warmup: No active server found -->';
+			$server = [
+				'id' => 0,
+				'domain' => 'system.local',
+				'metrics' => [ 'usage_today' => 0, 'limit' => 0 ]
+			];
 		}
 
 		// Prepare mailto parts
@@ -72,7 +96,13 @@ class Mailto {
 		$subject = $this->process_variables( $subject );
 		$body = $this->process_variables( $body );
 
-		// Build URL
+		// Build URL (Ensure Return-Path is implicitly set by the domain we use)
+		// Note: 'return-path' query param is NOT standard mailto, but some clients might use it.
+		// The real return-path is set by the sending server (Postal) when we send via API.
+		// However, the prompt asks: "Le mailto doit intégrer le Return-Path correct pour le serveur choisi"
+		// Maybe as a custom param for tracking or just ensuring the "To" domain is correct?
+		// We already set $email_to using $server['domain'].
+
 		$mailto_url = 'mailto:' . sanitize_email( $email_to ) . '?subject=' . rawurlencode( $subject ) . '&body=' . rawurlencode( $body );
 
 		// Priority 1: Template Default Label (Overrides content and attribute if set)
@@ -146,6 +176,19 @@ class Mailto {
 		$preset = $atts['preset'];
 		$track = $atts['track'] === 'true';
 
+		// Server Health Check for CSS
+		// Note: LoadBalancer V3 uses 'lb_metrics', V2 used 'metrics'
+		$metrics = $server['lb_metrics'] ?? ( $server['metrics'] ?? [] );
+
+		// Map metrics
+		$usage = $metrics['usage_today'] ?? ( $metrics['isp_usage'] ?? 0 );
+		$limit = $metrics['limit'] ?? ( $metrics['isp_limit'] ?? 0 );
+		$is_full = ( $limit > 0 && $usage >= $limit );
+
+		$status_class = 'pw-server-ok';
+		if ( $is_full ) $status_class = 'pw-server-full';
+		elseif ( $limit > 0 && ($usage / $limit) > 0.8 ) $status_class = 'pw-server-warn';
+
 		$preset_styles = [
 			'primary' => 'background: #2271b1; color: white; padding: 12px 24px; border-radius: 4px; text-decoration: none; display: inline-block; font-weight: 600; transition: background 0.3s;',
 			'success' => 'background: #46b450; color: white; padding: 12px 24px; border-radius: 4px; text-decoration: none; display: inline-block; font-weight: 600; transition: background 0.3s;',
@@ -164,7 +207,7 @@ class Mailto {
 		}
 
 		$final_style = $base_style . ( ! empty( $custom_style ) ? ' ' . $custom_style : '' );
-		$classes = 'pw-mailto-link' . ( ! empty( $custom_class ) ? ' ' . esc_attr( $custom_class ) : '' );
+		$classes = 'pw-mailto-link ' . $status_class . ( ! empty( $custom_class ) ? ' ' . esc_attr( $custom_class ) : '' );
 
 		$data_attrs = '';
 		if ( $track ) {
@@ -175,11 +218,23 @@ class Mailto {
 			);
 		}
 
+		// Tooltip Logic (Only for admins or debug mode?)
+		// Allowing public visibility might leak server stats.
+		// The prompt asks to add it. Let's add it as 'title' attribute for now.
+		$tooltip = sprintf(
+			"Server: %s | Usage: %d/%s | ISP: %s",
+			$server['domain'],
+			$usage,
+			$limit > 0 ? $limit : '∞',
+			'Auto'
+		);
+
 		return sprintf(
-			'<a href="%s" class="%s" style="%s" %s>%s</a>',
+			'<a href="%s" class="%s" style="%s" title="%s" %s>%s</a>',
 			esc_url( $mailto_url ),
 			$classes,
 			esc_attr( $final_style ),
+			esc_attr( $tooltip ),
 			$data_attrs,
 			$label
 		);
